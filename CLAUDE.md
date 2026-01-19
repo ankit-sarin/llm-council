@@ -23,7 +23,7 @@ Multi-model debate system where local Ollama models deliberate on questions, rev
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
 │  │  Stage 1    │→ │  Stage 2    │→ │  Consensus  │→ │  Stage 3    │    │
 │  │  Responses  │  │  Reviews    │  │ Calculation │  │  Synthesis  │    │
-│  │ (batched)   │  │ (batched)   │  │             │  │  (Claude)   │    │
+│  │ (parallel)  │  │ (parallel)  │  │             │  │  (Claude)   │    │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘    │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -32,7 +32,7 @@ Multi-model debate system where local Ollama models deliberate on questions, rev
 ┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
 │      Ollama      │      │      Ollama      │      │    Anthropic     │
 │      Models      │      │      Models      │      │   Claude Opus    │
-│  (VRAM batches)  │      │    (reviews)     │      │   (chairman)     │
+│   (parallel)     │      │    (reviews)     │      │   (chairman)     │
 └──────────────────┘      └──────────────────┘      └──────────────────┘
 ```
 
@@ -70,19 +70,19 @@ MODEL_VRAM_GB = {
     "mistral:7b": 4.0,
 }
 
-MAX_CONCURRENT_VRAM_GB = 45.0  # Max VRAM per batch
+MAX_CONCURRENT_VRAM_GB = 60.0  # Only batch if total exceeds this
 
 DEFAULT_ENABLED_MODELS = ["qwen2.5:32b", "gemma2:27b", "mistral:7b"]
 CHAIRMAN_MODEL = "claude-opus-4-5-20251101"
 ```
 
 ### council.py
-Async engine with VRAM-aware batching and streaming:
-- `stream_initial_responses_live(question, models, callbacks, document_text)` - Batched responses with live tokens
-- `stream_peer_reviews_live(question, responses, callbacks)` - Batched reviews with live tokens
+Async engine with parallel-first execution and streaming:
+- `stream_initial_responses_live(question, models, callbacks, document_text)` - Parallel responses (batches only if VRAM overflows)
+- `stream_peer_reviews_live(question, responses, callbacks)` - Parallel reviews (batches only if VRAM overflows)
 - `get_chairman_synthesis(question, responses, reviews, consensus, document_filename)` - Claude synthesis
 - `calculate_consensus(reviews, responses)` - Agreement score from peer review variance
-- `create_vram_batches(models)` - Groups models to fit within VRAM limits
+- `create_vram_batches(models)` - Groups models to fit within VRAM limits (used only when needed)
 
 ### app.py
 Gradio interface with 4 tabs:
@@ -125,14 +125,25 @@ class CouncilResult:
 
 ## Features
 
-### VRAM-Aware Batching
-Prevents GPU memory exhaustion by running models in batches:
+### Parallel-First Execution
+Models run in parallel by default for maximum speed. Batching only activates when total VRAM would exceed the limit:
 ```python
-def create_vram_batches(models, max_vram=45.0):
-    # Sort by VRAM descending (largest first)
-    # Greedily pack into batches that fit within max_vram
-    # Example: [70B] -> [32B, 7B] -> [27B]
+total_vram = sum(get_model_vram(m) for m in models)
+
+if total_vram <= MAX_CONCURRENT_VRAM_GB:  # 60GB default
+    # All models fit - run in parallel (single batch)
+    batches = [models]
+    execution_mode = "PARALLEL"
+else:
+    # Need to batch to avoid VRAM exhaustion
+    batches = create_vram_batches(models)
+    execution_mode = "BATCHED"
 ```
+
+| Selection | Total VRAM | Mode | Result |
+|-----------|------------|------|--------|
+| Default 3 models | 41GB | PARALLEL | All stream simultaneously |
+| Add llama3.3:70b | 81GB | BATCHED | Split into batches |
 
 ### Consensus Tracking
 Measures agreement between reviewers:
@@ -146,8 +157,9 @@ Analyze documents with the council:
 - **Supported formats:** .txt, .md, .pdf, .docx
 - **PDF extraction:** pdfplumber (better for tables)
 - **Word extraction:** python-docx (paragraphs + tables)
-- **Limits:** 5MB file size, 50k character extraction
-- **Warnings:** Long documents (>30k chars), truncation notice
+- **Limits:** 10MB file size, 150K character extraction
+- **Warnings:** Long documents (>100K chars), truncation notice
+- **Gemma 2 exclusion:** Automatically excluded for documents >30K chars (8K context limit)
 
 ### Session History
 All sessions saved to `sessions/` as JSON:
@@ -167,16 +179,16 @@ All sessions saved to `sessions/` as JSON:
 
 ## Council Flow
 
-### Stage 1: Initial Responses (Batched Streaming)
-- Models grouped into VRAM-aware batches
-- Each batch runs in parallel, batches run sequentially
-- 2-second delay between batches for GPU memory clearing
+### Stage 1: Initial Responses (Parallel Streaming)
+- All models run in parallel if total VRAM fits within limit (60GB)
+- Falls back to VRAM-aware batching only when necessary
+- 2-second delay between batches (if batched) for GPU memory clearing
 - UI updates as each model finishes with ✅ indicator
 
-### Stage 2: Peer Reviews (Batched Streaming)
+### Stage 2: Peer Reviews (Parallel Streaming)
 - Each model reviews OTHER models' responses (anonymized as "Response A", "Response B")
 - Models rank by: accuracy, insight, completeness (1-10 scale)
-- Batched execution same as Stage 1
+- Same parallel-first execution as Stage 1
 
 ### Stage 2.5: Consensus Calculation
 - Parse scores from all reviews
@@ -195,15 +207,21 @@ All sessions saved to `sessions/` as JSON:
 
 ## Key Implementation Patterns
 
-### VRAM Batching
+### Parallel-First Execution
 ```python
 async def stream_initial_responses_live(question, models, callbacks, document_text=None):
-    batches = create_vram_batches(models)  # [[70B], [32B, 7B], [27B]]
+    total_vram = sum(get_model_vram(m) for m in models)
+
+    if total_vram <= MAX_CONCURRENT_VRAM_GB:
+        batches = [models]  # All parallel
+    else:
+        batches = create_vram_batches(models)  # [[70B], [32B, 7B], [27B]]
 
     for batch in batches:
         tasks = [asyncio.create_task(run_model(m)) for m in batch]
         await asyncio.gather(*tasks)
-        await asyncio.sleep(2)  # Let GPU memory clear
+        if len(batches) > 1:
+            await asyncio.sleep(2)  # Let GPU memory clear between batches
 ```
 
 ### Document-Aware Prompts
