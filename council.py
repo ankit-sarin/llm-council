@@ -86,20 +86,9 @@ async def _call_ollama_streaming(model: str, prompt: str, on_token) -> ModelResp
     content = ""
 
     try:
-        def stream_sync():
-            nonlocal content
-            for chunk in ollama.chat(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                stream=True
-            ):
-                token = chunk["message"]["content"]
-                content += token
-                return token, content, False
-            return "", content, True
-
-        # Stream in a thread, yielding tokens
         import queue
+        import threading
+
         token_queue = queue.Queue()
 
         def run_stream():
@@ -115,13 +104,13 @@ async def _call_ollama_streaming(model: str, prompt: str, on_token) -> ModelResp
             except Exception as e:
                 token_queue.put(("error", str(e)))
 
-        import threading
         thread = threading.Thread(target=run_stream)
         thread.start()
 
         while True:
+            # Non-blocking check with small timeout, then yield to event loop
             try:
-                msg_type, data = token_queue.get(timeout=300)
+                msg_type, data = token_queue.get(timeout=0.05)
                 if msg_type == "done":
                     break
                 elif msg_type == "error":
@@ -131,7 +120,11 @@ async def _call_ollama_streaming(model: str, prompt: str, on_token) -> ModelResp
                     content += data
                     await on_token(model, content)
             except queue.Empty:
-                break
+                # Yield to event loop to allow other tasks to run
+                await asyncio.sleep(0.01)
+                # Check if thread is still alive
+                if not thread.is_alive() and token_queue.empty():
+                    break
 
         thread.join()
         elapsed = time.perf_counter() - start

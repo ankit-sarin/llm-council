@@ -51,17 +51,22 @@ def format_response_tabs(responses: dict) -> str:
 
 def format_responses_side_by_side(partial_responses: dict, complete_responses: dict, models: list) -> str:
     """Format responses in a side-by-side grid layout with live streaming text."""
+    import html as html_module
+
     if not partial_responses and not complete_responses:
-        return "*Waiting for responses...*"
+        return "<em>Waiting for responses...</em>"
+
+    if not models:
+        return "<em>No models selected</em>"
 
     # Build HTML grid for side-by-side display
     num_models = len(models)
     cols = min(num_models, 3)  # Max 3 columns
 
-    html = '<div style="display: grid; grid-template-columns: repeat(' + str(cols) + ', 1fr); gap: 16px;">'
+    html = f'<div style="display: grid; grid-template-columns: repeat({cols}, 1fr); gap: 16px;">'
 
     for model in models:
-        display_name = get_display_name(model)
+        display_name = html_module.escape(get_display_name(model))
         is_complete = model in complete_responses
 
         # Get content
@@ -75,7 +80,8 @@ def format_responses_side_by_side(partial_responses: dict, complete_responses: d
             status = "⏳ generating..."
             border_color = "#FF9800"
 
-        # Truncate for display if too long (show last part for streaming effect)
+        # Escape HTML in content and truncate if too long
+        content = html_module.escape(content) if content else ""
         display_content = content if len(content) < 2000 else "..." + content[-1800:]
 
         html += f'''
@@ -93,16 +99,21 @@ def format_responses_side_by_side(partial_responses: dict, complete_responses: d
 
 def format_reviews_side_by_side(partial_reviews: dict, complete_reviews: dict, models: list) -> str:
     """Format reviews in a side-by-side grid layout with live streaming text."""
+    import html as html_module
+
     if not partial_reviews and not complete_reviews:
-        return "*Waiting for reviews...*"
+        return "<em>Waiting for reviews...</em>"
+
+    if not models:
+        return "<em>No reviewers</em>"
 
     num_models = len(models)
     cols = min(num_models, 3)
 
-    html = '<div style="display: grid; grid-template-columns: repeat(' + str(cols) + ', 1fr); gap: 16px;">'
+    html = f'<div style="display: grid; grid-template-columns: repeat({cols}, 1fr); gap: 16px;">'
 
     for model in models:
-        display_name = get_display_name(model)
+        display_name = html_module.escape(get_display_name(model))
         is_complete = model in complete_reviews
 
         if is_complete:
@@ -114,6 +125,8 @@ def format_reviews_side_by_side(partial_reviews: dict, complete_reviews: dict, m
             status = "⏳ reviewing..."
             border_color = "#FF9800"
 
+        # Escape HTML in content and truncate if too long
+        content = html_module.escape(content) if content else ""
         display_content = content if len(content) < 1500 else "..." + content[-1300:]
 
         html += f'''
@@ -504,10 +517,10 @@ def create_app():
                 gr.Markdown("### Detailed view of the deliberation process")
 
                 with gr.Accordion("Stage 1: Individual Responses", open=True, elem_classes="stage-1"):
-                    responses_display = gr.Markdown(value="*No responses yet*", elem_classes="stage-1-content")
+                    responses_display = gr.HTML(value="<em>No responses yet</em>")
 
                 with gr.Accordion("Stage 2: Peer Reviews", open=True, elem_classes="stage-2"):
-                    reviews_display = gr.Markdown(value="*No reviews yet*", elem_classes="stage-2-content")
+                    reviews_display = gr.HTML(value="<em>No reviews yet</em>")
                     gr.Markdown("#### Agreement Summary")
                     agreement_display = gr.Markdown(value="*Submit a question to see agreement analysis*")
 
