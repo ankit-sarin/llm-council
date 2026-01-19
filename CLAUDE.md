@@ -7,16 +7,17 @@ Multi-model debate system where local Ollama models deliberate on questions, rev
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     Gradio Interface                        │
-│  [Question Input] → [Debate View] → [Review View] → [Final] │
+│  Tab 1: Ask Council  │  Tab 2: Deliberation  │  Tab 3: Settings │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                      Council Engine                         │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐        │
-│  │ Stage 1 │→ │ Stage 2 │→ │ Stage 3 │→ │ Stage 4 │        │
-│  │ Debate  │  │ Review  │  │ Rebut   │  │Synthesis│        │
-│  └─────────┘  └─────────┘  └─────────┘  └─────────┘        │
+│                   Council Engine (council.py)               │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │  Stage 1    │→ │  Stage 2    │→ │  Stage 3    │         │
+│  │  Responses  │  │  Reviews    │  │  Synthesis  │         │
+│  │ (streaming) │  │ (streaming) │  │  (Claude)   │         │
+│  └─────────────┘  └─────────────┘  └─────────────┘         │
 └─────────────────────────────────────────────────────────────┘
                               │
         ┌─────────────────────┼─────────────────────┐
@@ -32,154 +33,136 @@ Multi-model debate system where local Ollama models deliberate on questions, rev
 
 ```
 llm-council/
-├── CLAUDE.md
-├── requirements.txt
-├── app.py                 # Gradio interface entry point
-├── council/
-│   ├── __init__.py
-│   ├── engine.py          # Council orchestration logic
-│   ├── models.py          # Pydantic models for responses
-│   └── clients/
-│       ├── __init__.py
-│       ├── ollama.py      # Async Ollama client wrapper
-│       └── anthropic.py   # Async Anthropic client wrapper
-└── prompts/
-    ├── debate.txt         # Initial response prompt
-    ├── review.txt         # Anonymous peer review prompt
-    ├── rebuttal.txt       # Response to reviews prompt
-    └── synthesis.txt      # Chairman synthesis prompt
+├── CLAUDE.md           # This file
+├── requirements.txt    # Python dependencies
+├── config.py           # Model configuration
+├── council.py          # Async council engine with streaming
+└── app.py              # Gradio interface (port 7861)
 ```
 
-## Available Ollama Models
+## Files
 
-Council members (run parallel via asyncio):
-- `deepseek-r1:32b` - Strong reasoning
-- `qwen2.5:32b` - Balanced general purpose
-- `gemma2:27b` - Good instruction following
-- `mistral:7b` - Fast, good for quick debates
-- `llama3.3:70b` - Large, high quality (slower)
-- `llama3.2:3b` - Lightweight fallback
-
-## Code Conventions
-
-### Async Patterns
-
-All model calls must be async. Use `asyncio.gather()` for parallel execution:
-
+### config.py
+Model configuration with VRAM requirements:
 ```python
-async def run_debate(question: str, models: list[str]) -> list[Response]:
-    tasks = [get_model_response(model, question) for model in models]
-    return await asyncio.gather(*tasks)
+AVAILABLE_MODELS = [
+    "llama3.3:70b",     # ~40GB - Meta's flagship
+    "qwen2.5:32b",      # ~20GB - Alibaba's multilingual model
+    "gemma2:27b",       # ~17GB - Google's efficient model
+    "deepseek-r1:32b",  # ~20GB - Reasoning specialist
+    "mistral:7b",       # ~4GB  - Fast European model
+]
+
+DEFAULT_ENABLED_MODELS = ["qwen2.5:32b", "gemma2:27b", "mistral:7b"]
+CHAIRMAN_MODEL = "claude-opus-4-5-20251101"
 ```
 
-### Response Models
+### council.py
+Async engine with streaming callbacks:
+- `stream_initial_responses(question, models, callback)` - Yields as each model completes
+- `stream_peer_reviews(question, responses, callback)` - Yields as each review completes
+- `get_chairman_synthesis(question, responses, reviews)` - Claude Opus final synthesis
 
-Use Pydantic for all data structures:
+### app.py
+Gradio interface with 3 tabs:
+- **Tab 1: Ask the Council** - Model checkboxes, question input, final answer
+- **Tab 2: Council Deliberation** - Live view of responses/reviews as they arrive
+- **Tab 3: Settings** - Chairman info, verbose toggle
+
+## Data Classes
 
 ```python
-class Response(BaseModel):
+@dataclass
+class ModelResponse:
     model: str
     content: str
-    stage: Literal["debate", "review", "rebuttal", "synthesis"]
-    timestamp: datetime = Field(default_factory=datetime.now)
+    elapsed_seconds: float
 
-class Review(BaseModel):
+@dataclass
+class PeerReview:
     reviewer: str
-    target_id: str  # anonymized: "Response A", "Response B", etc.
-    critique: str
-    score: int = Field(ge=1, le=10)
+    rankings: list[dict]
+    analysis: str
+
+@dataclass
+class CouncilResult:
+    question: str
+    responses: dict[str, ModelResponse]
+    reviews: dict[str, PeerReview]
+    synthesis: str
+    total_elapsed: float
 ```
 
-### Anonymization
+## Council Flow
 
-When passing responses for review, strip model names:
+### Stage 1: Initial Responses (Streaming)
+- All Ollama models run in parallel via `asyncio.as_completed()`
+- UI updates as each model finishes with ✅ indicator
+- Shows elapsed time per model
 
+### Stage 2: Peer Reviews (Streaming)
+- Each model reviews OTHER models' responses (anonymized as "Response A", "Response B")
+- Models rank by: accuracy, insight, completeness (1-10 scale)
+- UI updates as each review completes
+
+### Stage 3: Chairman Synthesis
+- Claude Opus 4.5 receives all responses with model names + all reviews
+- Produces:
+  1. Synthesized best answer
+  2. Key contributors and their insights
+  3. Areas of consensus
+  4. Areas of disagreement and resolution
+
+## Key Implementation Patterns
+
+### Streaming with asyncio.as_completed
 ```python
-def anonymize_responses(responses: list[Response]) -> dict[str, str]:
-    return {f"Response {chr(65+i)}": r.content for i, r in enumerate(responses)}
+async def stream_initial_responses(question, models, callback):
+    tasks = [asyncio.create_task(call_with_id(model)) for model in models]
+    for coro in asyncio.as_completed(tasks):
+        model, response = await coro
+        await callback(model, response, all_responses)
 ```
 
-### Client Wrappers
-
-Ollama client (council/clients/ollama.py):
+### Sync Ollama wrapped for async
 ```python
-import ollama
-
-async def query_ollama(model: str, prompt: str) -> str:
+async def _call_ollama(model: str, prompt: str) -> ModelResponse:
     response = await asyncio.to_thread(
         ollama.chat,
         model=model,
         messages=[{"role": "user", "content": prompt}]
     )
-    return response["message"]["content"]
+    return ModelResponse(model=model, content=response["message"]["content"], ...)
 ```
 
-Anthropic client (council/clients/anthropic.py):
+### Gradio generator for live updates
 ```python
-from anthropic import Anthropic
-
-client = Anthropic()
-
-async def query_claude(prompt: str, system: str = "") -> str:
-    response = await asyncio.to_thread(
-        client.messages.create,
-        model="claude-opus-4-5-20251101",
-        max_tokens=4096,
-        system=system,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response.content[0].text
+def run_council_generator(question, selected_models):
+    result_queue = queue.Queue()
+    # Async runner pushes to queue
+    # Generator yields from queue for Gradio streaming
+    while True:
+        msg_type, data = result_queue.get(timeout=600)
+        if msg_type == "done":
+            break
+        yield data
 ```
 
-## Council Flow
-
-### Stage 1: Initial Debate
-Each Ollama model answers the question independently (parallel).
-
-### Stage 2: Peer Review
-Each model reviews all other responses (anonymized as "Response A", "Response B", etc.). Models cannot review their own response.
-
-### Stage 3: Rebuttal (optional)
-Models can respond to critiques of their answers.
-
-### Stage 4: Chairman Synthesis
-Claude Opus 4.5 receives:
-- Original question
-- All responses with model names
-- All reviews
-- Any rebuttals
-
-Produces final synthesized answer highlighting consensus, disagreements, and best reasoning.
-
-## Gradio Interface
-
-Use `gr.Blocks` for multi-stage display:
-
+### Anonymization for peer review
 ```python
-with gr.Blocks() as app:
-    question = gr.Textbox(label="Question")
-    submit = gr.Button("Convene Council")
-
-    with gr.Tab("Debate"):
-        debate_output = gr.Markdown()
-    with gr.Tab("Reviews"):
-        review_output = gr.Markdown()
-    with gr.Tab("Final Synthesis"):
-        synthesis_output = gr.Markdown()
-
-    submit.click(
-        fn=run_council,
-        inputs=[question],
-        outputs=[debate_output, review_output, synthesis_output]
-    )
+def _anonymize_responses(responses, exclude_model):
+    other_responses = {k: v for k, v in responses.items() if k != exclude_model}
+    mapping = {}
+    for i, (model, response) in enumerate(other_responses.items()):
+        letter = chr(65 + i)  # A, B, C, ...
+        mapping[letter] = model
+    return formatted_text, mapping
 ```
 
 ## Environment Variables
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...  # Required for chairman
-OLLAMA_HOST=http://localhost:11434  # Default Ollama endpoint
-COUNCIL_MODELS=deepseek-r1:32b,qwen2.5:32b,gemma2:27b  # Comma-separated
 ```
 
 ## Commands
@@ -187,37 +170,26 @@ COUNCIL_MODELS=deepseek-r1:32b,qwen2.5:32b,gemma2:27b  # Comma-separated
 ```bash
 # Run the app
 python app.py
+# Runs on http://0.0.0.0:7861
 
 # Test Ollama connectivity
 ollama list
-
-# Run with specific models
-COUNCIL_MODELS=mistral:7b,llama3.2:3b python app.py
 ```
 
-## Error Handling
+## UI Status Indicators
 
-Wrap model calls with timeouts and fallbacks:
-
-```python
-async def safe_query(model: str, prompt: str, timeout: int = 120) -> str:
-    try:
-        return await asyncio.wait_for(
-            query_ollama(model, prompt),
-            timeout=timeout
-        )
-    except asyncio.TimeoutError:
-        return f"[{model} timed out]"
-    except Exception as e:
-        return f"[{model} error: {e}]"
+During processing, the UI shows:
+```
+Stage 1/3: Gathering responses (2/3 complete)...
+- Qwen 2.5 32B: ✅ 45.2s
+- Gemma 2 27B: ✅ 52.1s
+- Mistral 7B: ⏳ working...
 ```
 
-## Testing a Single Model
+## Dependencies
 
-```python
-import ollama
-response = ollama.chat(model="mistral:7b", messages=[
-    {"role": "user", "content": "Hello"}
-])
-print(response["message"]["content"])
-```
+Key packages from requirements.txt:
+- `gradio==6.3.0` - Web interface
+- `ollama==0.6.1` - Local model API
+- `anthropic==0.76.0` - Claude API
+- `asyncio` - Parallel execution
