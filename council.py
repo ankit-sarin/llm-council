@@ -45,6 +45,15 @@ class PeerReview:
 
 
 @dataclass
+class ConsensusScore:
+    """Consensus metrics from peer reviews."""
+    score: float  # 0-100, higher = more agreement
+    level: str  # "high", "medium", "low"
+    description: str  # Human-readable description
+    disagreement_areas: list[str]  # Specific areas where models disagreed
+
+
+@dataclass
 class CouncilResult:
     """Complete results from a council session."""
     question: str
@@ -52,6 +61,7 @@ class CouncilResult:
     reviews: dict[str, PeerReview]
     synthesis: str
     total_elapsed: float
+    consensus: ConsensusScore | None = None
 
 
 # --- Ollama Calls ---
@@ -488,12 +498,148 @@ async def get_peer_reviews(
     return reviews
 
 
+# --- Consensus Calculation ---
+
+import re
+import statistics
+
+
+def _parse_review_scores(analysis: str) -> dict[str, dict[str, int]]:
+    """
+    Parse scores from review analysis text.
+
+    Returns dict like: {"A": {"accuracy": 8, "insight": 7, "completeness": 9}, ...}
+    """
+    scores = {}
+
+    # Pattern: Response A: Accuracy=8, Insight=7, Completeness=9
+    # Also handles variations like "Response A - Accuracy: 8"
+    pattern = r'Response\s+([A-Z])[\s:=-]+.*?Accuracy[\s:=]+(\d+).*?Insight[\s:=]+(\d+).*?Completeness[\s:=]+(\d+)'
+
+    for match in re.finditer(pattern, analysis, re.IGNORECASE | re.DOTALL):
+        letter = match.group(1).upper()
+        scores[letter] = {
+            "accuracy": int(match.group(2)),
+            "insight": int(match.group(3)),
+            "completeness": int(match.group(4)),
+        }
+
+    return scores
+
+
+def calculate_consensus(reviews: dict[str, PeerReview], responses: dict[str, ModelResponse]) -> ConsensusScore:
+    """
+    Calculate consensus score from peer reviews.
+
+    Measures how much reviewers agree on the quality of responses.
+    High variance in scores = low consensus (disagreement).
+    Low variance = high consensus (agreement).
+    """
+    if len(reviews) < 2:
+        return ConsensusScore(
+            score=50.0,
+            level="unknown",
+            description="Need at least 2 reviews to calculate consensus",
+            disagreement_areas=[]
+        )
+
+    # Parse all review scores
+    all_scores = {}  # {reviewer: {response_letter: {criterion: score}}}
+    response_to_model = {}  # Map response letters back to models
+
+    for reviewer, review in reviews.items():
+        parsed = _parse_review_scores(review.analysis)
+        if parsed:
+            all_scores[reviewer] = parsed
+            # Build response-to-model mapping from rankings
+            for ranking in review.rankings:
+                if "response" in ranking and "model" in ranking:
+                    response_to_model[ranking["response"]] = ranking["model"]
+
+    if len(all_scores) < 2:
+        return ConsensusScore(
+            score=50.0,
+            level="unknown",
+            description="Could not parse enough review scores",
+            disagreement_areas=[]
+        )
+
+    # Calculate variance for each response on each criterion
+    variances = []
+    disagreement_details = []
+
+    # Get all response letters that were reviewed
+    all_letters = set()
+    for reviewer_scores in all_scores.values():
+        all_letters.update(reviewer_scores.keys())
+
+    for letter in sorted(all_letters):
+        for criterion in ["accuracy", "insight", "completeness"]:
+            # Collect scores from all reviewers for this response+criterion
+            criterion_scores = []
+            for reviewer, reviewer_scores in all_scores.items():
+                if letter in reviewer_scores and criterion in reviewer_scores[letter]:
+                    criterion_scores.append(reviewer_scores[letter][criterion])
+
+            if len(criterion_scores) >= 2:
+                variance = statistics.variance(criterion_scores)
+                variances.append(variance)
+
+                # Track significant disagreements (variance > 4 means scores differ by ~2+ points)
+                if variance > 4:
+                    model_name = response_to_model.get(letter, f"Response {letter}")
+                    if model_name in responses:
+                        model_name = get_display_name(model_name)
+                    disagreement_details.append(
+                        f"{criterion.capitalize()} of {model_name} (variance: {variance:.1f})"
+                    )
+
+    if not variances:
+        return ConsensusScore(
+            score=50.0,
+            level="unknown",
+            description="Insufficient data to calculate consensus",
+            disagreement_areas=[]
+        )
+
+    # Average variance across all scores
+    # Scale: 0 variance = perfect agreement, 20+ variance = major disagreement
+    avg_variance = statistics.mean(variances)
+
+    # Convert to 0-100 score (inverse: low variance = high score)
+    # Max reasonable variance is ~20 (scores ranging 1-10)
+    consensus_score = max(0, min(100, 100 - (avg_variance * 5)))
+
+    # Determine level
+    if consensus_score >= 75:
+        level = "high"
+        description = "Strong agreement among council members"
+    elif consensus_score >= 50:
+        level = "medium"
+        description = "Moderate agreement with some differing perspectives"
+    else:
+        level = "low"
+        description = "Significant disagreement - topic may be complex or subjective"
+
+    # Add summary of disagreements
+    if disagreement_details:
+        description += f". Key disagreements: {len(disagreement_details)} areas"
+
+    return ConsensusScore(
+        score=round(consensus_score, 1),
+        level=level,
+        description=description,
+        disagreement_areas=disagreement_details[:5]  # Top 5 disagreements
+    )
+
+
 # --- Chairman Synthesis ---
 
 async def get_chairman_synthesis(
     question: str,
     responses: dict[str, ModelResponse],
     reviews: dict[str, PeerReview],
+    consensus: ConsensusScore | None = None,
 ) -> str:
     """
     Get final synthesis from the chairman (Claude Opus).
@@ -502,6 +648,7 @@ async def get_chairman_synthesis(
         question: The original question
         responses: All council member responses
         reviews: All peer reviews
+        consensus: Optional consensus score to guide synthesis emphasis
 
     Returns:
         Chairman's synthesized answer
@@ -509,6 +656,8 @@ async def get_chairman_synthesis(
     logger.info("=" * 60)
     logger.info("STAGE 3: CHAIRMAN SYNTHESIS")
     logger.info(f"Chairman: {get_display_name(CHAIRMAN_MODEL)}")
+    if consensus:
+        logger.info(f"Consensus level: {consensus.level} ({consensus.score})")
     logger.info("=" * 60)
 
     # Format responses with model names (no longer anonymous for chairman)
@@ -525,17 +674,40 @@ async def get_chairman_synthesis(
         reviews_text += f"=== Review by {display_name} ===\n"
         reviews_text += f"{review.analysis}\n\n"
 
+    # Build consensus context for the prompt
+    consensus_context = ""
+    disagreement_emphasis = ""
+
+    if consensus:
+        consensus_context = f"""
+CONSENSUS ANALYSIS:
+- Agreement Score: {consensus.score}/100 ({consensus.level} consensus)
+- {consensus.description}
+"""
+        if consensus.disagreement_areas:
+            consensus_context += "- Specific disagreements: " + "; ".join(consensus.disagreement_areas) + "\n"
+
+        # When consensus is low, emphasize the importance of addressing disagreements
+        if consensus.level == "low":
+            disagreement_emphasis = """
+IMPORTANT: The council shows LOW CONSENSUS on this topic. This indicates the question may be complex, subjective, or have multiple valid perspectives. Pay special attention to:
+- Why different council members reached different conclusions
+- What underlying assumptions or values might explain the disagreement
+- Whether the disagreement reveals important nuances the user should know about
+- Present multiple perspectives fairly rather than forcing artificial agreement
+"""
+
     prompt = f"""You are the Chairman of an expert council. Your council members have deliberated on a question and reviewed each other's responses. Your task is to synthesize the best possible final answer.
 
 ORIGINAL QUESTION:
 {question}
-
+{consensus_context}
 COUNCIL MEMBER RESPONSES:
 {responses_text}
 
 PEER REVIEWS:
 {reviews_text}
-
+{disagreement_emphasis}
 As Chairman, please provide:
 
 1. SYNTHESIS: The best comprehensive answer, combining the strongest elements from all responses while correcting any errors noted in reviews.
@@ -544,7 +716,7 @@ As Chairman, please provide:
 
 3. AREAS OF CONSENSUS: Where did the council agree?
 
-4. AREAS OF DISAGREEMENT: Where did opinions differ, and how did you resolve this?
+4. AREAS OF DISAGREEMENT: Where did opinions differ, and how did you resolve this?{' Pay particular attention here given the low consensus score.' if consensus and consensus.level == 'low' else ''}
 
 Please begin your synthesis:"""
 
