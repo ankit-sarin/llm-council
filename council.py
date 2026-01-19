@@ -57,7 +57,7 @@ class CouncilResult:
 # --- Ollama Calls ---
 
 async def _call_ollama(model: str, prompt: str) -> ModelResponse:
-    """Call a single Ollama model asynchronously."""
+    """Call a single Ollama model asynchronously (non-streaming)."""
     logger.info(f"[{get_display_name(model)}] Starting generation...")
     start = time.perf_counter()
 
@@ -70,6 +70,71 @@ async def _call_ollama(model: str, prompt: str) -> ModelResponse:
         )
         elapsed = time.perf_counter() - start
         content = response["message"]["content"]
+        logger.info(f"[{get_display_name(model)}] Done in {elapsed:.1f}s ({len(content)} chars)")
+        return ModelResponse(model=model, content=content, elapsed_seconds=elapsed)
+
+    except Exception as e:
+        elapsed = time.perf_counter() - start
+        logger.error(f"[{get_display_name(model)}] Failed after {elapsed:.1f}s: {e}")
+        return ModelResponse(model=model, content=f"[Error: {e}]", elapsed_seconds=elapsed)
+
+
+async def _call_ollama_streaming(model: str, prompt: str, on_token) -> ModelResponse:
+    """Call Ollama with token streaming, calling on_token for each chunk."""
+    logger.info(f"[{get_display_name(model)}] Starting streaming generation...")
+    start = time.perf_counter()
+    content = ""
+
+    try:
+        def stream_sync():
+            nonlocal content
+            for chunk in ollama.chat(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True
+            ):
+                token = chunk["message"]["content"]
+                content += token
+                return token, content, False
+            return "", content, True
+
+        # Stream in a thread, yielding tokens
+        import queue
+        token_queue = queue.Queue()
+
+        def run_stream():
+            try:
+                for chunk in ollama.chat(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    stream=True
+                ):
+                    token = chunk["message"]["content"]
+                    token_queue.put(("token", token))
+                token_queue.put(("done", None))
+            except Exception as e:
+                token_queue.put(("error", str(e)))
+
+        import threading
+        thread = threading.Thread(target=run_stream)
+        thread.start()
+
+        while True:
+            try:
+                msg_type, data = token_queue.get(timeout=300)
+                if msg_type == "done":
+                    break
+                elif msg_type == "error":
+                    content = f"[Error: {data}]"
+                    break
+                elif msg_type == "token":
+                    content += data
+                    await on_token(model, content)
+            except queue.Empty:
+                break
+
+        thread.join()
+        elapsed = time.perf_counter() - start
         logger.info(f"[{get_display_name(model)}] Done in {elapsed:.1f}s ({len(content)} chars)")
         return ModelResponse(model=model, content=content, elapsed_seconds=elapsed)
 
@@ -155,6 +220,141 @@ YOUR RESPONSE:"""
 
     logger.info(f"Stage 1 complete. {len(responses)} responses collected.")
     return responses
+
+
+async def stream_initial_responses_live(question: str, models: list[str], on_token_callback, on_complete_callback):
+    """
+    Stream initial responses with live token updates.
+
+    Args:
+        question: The question to ask the council
+        models: List of model names
+        on_token_callback: async function(partial_responses: dict) called on each token
+        on_complete_callback: async function(model, response, all_responses) called when model completes
+    """
+    logger.info("=" * 60)
+    logger.info("STAGE 1: INITIAL RESPONSES (LIVE STREAMING)")
+    logger.info(f"Question: {question[:100]}{'...' if len(question) > 100 else ''}")
+    logger.info(f"Council members: {len(models)}")
+    logger.info("=" * 60)
+
+    prompt = f"""You are a member of an expert council deliberating on the following question.
+Provide your best, most thoughtful answer. Be thorough but concise.
+
+QUESTION: {question}
+
+YOUR RESPONSE:"""
+
+    # Track partial and complete responses
+    partial_responses = {m: "" for m in models}
+    complete_responses = {}
+    start_times = {m: time.perf_counter() for m in models}
+
+    # Lock for thread-safe updates
+    import threading
+    lock = threading.Lock()
+
+    async def on_token(model, content):
+        with lock:
+            partial_responses[model] = content
+        await on_token_callback(partial_responses, complete_responses)
+
+    async def run_model(model):
+        response = await _call_ollama_streaming(model, prompt, on_token)
+        with lock:
+            complete_responses[model] = response
+            partial_responses[model] = response.content
+        await on_complete_callback(model, response, complete_responses)
+        return response
+
+    # Run all models concurrently
+    tasks = [asyncio.create_task(run_model(m)) for m in models]
+    await asyncio.gather(*tasks)
+
+    logger.info(f"Stage 1 complete. {len(complete_responses)} responses collected.")
+    return complete_responses
+
+
+async def stream_peer_reviews_live(question: str, responses: dict[str, ModelResponse], on_token_callback, on_complete_callback):
+    """
+    Stream peer reviews with live token updates.
+
+    Args:
+        question: The original question
+        responses: Dict of model responses from stage 1
+        on_token_callback: async function(partial_reviews: dict) called on each token
+        on_complete_callback: async function(reviewer, review, all_reviews) called when review completes
+    """
+    logger.info("=" * 60)
+    logger.info("STAGE 2: PEER REVIEWS (LIVE STREAMING)")
+    logger.info(f"Each of {len(responses)} models reviewing {len(responses)-1} responses")
+    logger.info("=" * 60)
+
+    partial_reviews = {m: "" for m in responses.keys()}
+    complete_reviews = {}
+
+    import threading
+    lock = threading.Lock()
+
+    async def review_model(reviewer):
+        anonymized, mapping = _anonymize_responses(responses, exclude_model=reviewer)
+        logger.info(f"[{get_display_name(reviewer)}] Reviewing responses: {list(mapping.keys())}")
+
+        prompt = f"""You are reviewing responses from other council members on the following question.
+Your task is to evaluate each response and rank them.
+
+ORIGINAL QUESTION: {question}
+
+RESPONSES TO REVIEW:
+{anonymized}
+
+Please evaluate each response on three criteria (1-10 scale):
+- ACCURACY: How factually correct is the response?
+- INSIGHT: How deep and valuable are the insights?
+- COMPLETENESS: How thoroughly does it address the question?
+
+Provide your evaluation in this exact format:
+
+RANKINGS:
+Response A: Accuracy=X, Insight=X, Completeness=X
+Response B: Accuracy=X, Insight=X, Completeness=X
+[continue for all responses]
+
+ANALYSIS:
+[Brief explanation of your rankings and what stood out about each response]"""
+
+        async def on_token(model, content):
+            with lock:
+                partial_reviews[reviewer] = content
+            await on_token_callback(partial_reviews, complete_reviews)
+
+        response = await _call_ollama_streaming(reviewer, prompt, on_token)
+
+        rankings = []
+        for letter in mapping.keys():
+            rankings.append({
+                "response": letter,
+                "model": mapping[letter],
+            })
+
+        review = PeerReview(
+            reviewer=reviewer,
+            rankings=rankings,
+            analysis=response.content,
+        )
+
+        with lock:
+            complete_reviews[reviewer] = review
+            partial_reviews[reviewer] = response.content
+
+        await on_complete_callback(reviewer, review, complete_reviews)
+        return review
+
+    tasks = [asyncio.create_task(review_model(r)) for r in responses.keys()]
+    await asyncio.gather(*tasks)
+
+    logger.info("Stage 2 complete.")
+    return complete_reviews
 
 
 async def stream_peer_reviews(question: str, responses: dict[str, ModelResponse], callback):
