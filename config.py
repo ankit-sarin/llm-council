@@ -25,8 +25,8 @@ MODEL_VRAM_GB: dict[str, float] = {
 }
 
 # Maximum VRAM to use concurrently (leave some headroom)
-# Adjust this based on your GPU - default assumes ~48GB available
-MAX_CONCURRENT_VRAM_GB: float = 45.0
+# Adjust this based on your GPU - set higher if you have more VRAM
+MAX_CONCURRENT_VRAM_GB: float = 60.0
 
 # Default models enabled on startup (3 models)
 DEFAULT_ENABLED_MODELS: list[str] = [

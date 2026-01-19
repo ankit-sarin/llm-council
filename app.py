@@ -193,10 +193,11 @@ def export_session_to_markdown(session_id: str) -> str:
 # --- File Upload Configuration ---
 # These constants control file upload limits
 
-MAX_FILE_SIZE_MB = 5  # Maximum file size in megabytes
+MAX_FILE_SIZE_MB = 10  # Maximum file size in megabytes
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024  # Convert to bytes
-MAX_TEXT_CHARS = 50000  # Maximum characters to extract from a file
-LONG_DOC_WARNING_CHARS = 30000  # Show warning if document exceeds this
+MAX_TEXT_CHARS = 150000  # Maximum characters to extract from a file
+LONG_DOC_WARNING_CHARS = 100000  # Show warning if document exceeds this
+GEMMA_EXCLUSION_CHARS = 30000  # Exclude Gemma 2 (8K context) if document exceeds this
 
 
 # --- File Text Extraction ---
@@ -376,6 +377,7 @@ def get_file_info(file_path: str) -> dict:
     char_count = len(text)
     is_long = char_count > LONG_DOC_WARNING_CHARS
     is_truncated = char_count >= MAX_TEXT_CHARS
+    exclude_gemma = char_count > GEMMA_EXCLUSION_CHARS  # Gemma 2 has 8K context limit
 
     # Create preview (first 500 chars)
     preview = text[:500] + ("..." if len(text) > 500 else "")
@@ -389,6 +391,7 @@ def get_file_info(file_path: str) -> dict:
         "preview": preview,
         "is_long": is_long,
         "is_truncated": is_truncated,
+        "exclude_gemma": exclude_gemma,  # True if doc exceeds 30K chars
         "error": None
     }
 
@@ -1280,6 +1283,15 @@ def create_app():
             if info.get("is_long"):
                 warnings.append("⚠️ Long document - some models may truncate")
 
+            # Show Gemma exclusion note if document exceeds 30K chars
+            gemma_note = ""
+            if info.get("exclude_gemma"):
+                gemma_note = '''
+                <div style="background: #e3f2fd; border: 1px solid #2196F3; border-radius: 4px; padding: 8px; margin-top: 8px;">
+                    ℹ️ <strong>Note:</strong> Gemma 2 excluded for this query due to document length (8K context limit)
+                </div>
+                '''
+
             warning_html = ""
             if warnings:
                 warning_html = f'''
@@ -1299,6 +1311,7 @@ def create_app():
 {info["preview"]}
                 </div>
                 {warning_html}
+                {gemma_note}
             </div>
             '''
 
@@ -1307,7 +1320,8 @@ def create_app():
                 "filename": info["filename"],
                 "char_count": info["char_count"],
                 "text": info["text"],
-                "preview": info["text"][:1000]  # First 1000 chars for session saving
+                "preview": info["text"][:1000],  # First 1000 chars for session saving
+                "exclude_gemma": info.get("exclude_gemma", False)  # Exclude Gemma if >30K chars
             }
 
             return (
@@ -1351,11 +1365,17 @@ def create_app():
                 document: Dict with document info (or None if no file)
                 *checkbox_values: Which models are selected
             """
+            # Check if we need to exclude Gemma 2 due to document length
+            exclude_gemma = document.get("exclude_gemma", False) if document else False
+
             # Build list of selected model display names
             selected = []
             for i, is_checked in enumerate(checkbox_values):
                 if is_checked:
                     model_id = AVAILABLE_MODELS[i]
+                    # Skip Gemma 2 if document exceeds 30K chars (8K context limit)
+                    if exclude_gemma and "gemma2" in model_id.lower():
+                        continue
                     selected.append(get_display_name(model_id))
 
             # Extract document text if present

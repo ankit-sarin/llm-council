@@ -236,7 +236,8 @@ async def stream_initial_responses_live(
 ):
     """
     Stream initial responses with live token updates.
-    Uses VRAM-aware batching to avoid GPU memory exhaustion.
+    Runs all models in parallel unless total VRAM exceeds the limit,
+    in which case VRAM-aware batching is used.
 
     Args:
         question: The question to ask the council
@@ -245,18 +246,32 @@ async def stream_initial_responses_live(
         on_complete_callback: async function(model, response, all_responses) called when model completes
         document_text: Optional text from an uploaded document to analyze
     """
-    # Create VRAM-aware batches
-    batches = create_vram_batches(models)
+    from config import MAX_CONCURRENT_VRAM_GB
+
+    # Calculate total VRAM needed for all models
+    total_vram = sum(get_model_vram(m) for m in models)
+
+    # Only use batching if total VRAM exceeds the limit
+    if total_vram <= MAX_CONCURRENT_VRAM_GB:
+        # All models fit - run in parallel (single batch)
+        batches = [models]
+        execution_mode = "PARALLEL"
+    else:
+        # Need to batch to avoid VRAM exhaustion
+        batches = create_vram_batches(models)
+        execution_mode = "BATCHED"
 
     logger.info("=" * 60)
     logger.info("STAGE 1: INITIAL RESPONSES (LIVE STREAMING)")
     logger.info(f"Question: {question[:100]}{'...' if len(question) > 100 else ''}")
     if document_text:
         logger.info(f"Document: {len(document_text)} characters provided")
-    logger.info(f"Council members: {len(models)} in {len(batches)} batch(es)")
-    for i, batch in enumerate(batches):
-        batch_vram = sum(get_model_vram(m) for m in batch)
-        logger.info(f"  Batch {i+1}: {[get_display_name(m) for m in batch]} (~{batch_vram:.0f}GB)")
+    logger.info(f"Council members: {len(models)} | Total VRAM: ~{total_vram:.0f}GB | Limit: {MAX_CONCURRENT_VRAM_GB}GB")
+    logger.info(f"Execution mode: {execution_mode} ({len(batches)} batch{'es' if len(batches) > 1 else ''})")
+    if len(batches) > 1:
+        for i, batch in enumerate(batches):
+            batch_vram = sum(get_model_vram(m) for m in batch)
+            logger.info(f"  Batch {i+1}: {[get_display_name(m) for m in batch]} (~{batch_vram:.0f}GB)")
     logger.info("=" * 60)
 
     # Build prompt - different format when document is provided
@@ -301,9 +316,12 @@ YOUR RESPONSE:"""
         await on_complete_callback(model, response, complete_responses)
         return response
 
-    # Run models in VRAM-aware batches
+    # Run models - in parallel if single batch, or sequentially by batch
     for batch_idx, batch in enumerate(batches):
-        logger.info(f"Running batch {batch_idx + 1}/{len(batches)}: {[get_display_name(m) for m in batch]}")
+        if len(batches) == 1:
+            logger.info(f"Running all {len(batch)} models in parallel...")
+        else:
+            logger.info(f"Running batch {batch_idx + 1}/{len(batches)}: {[get_display_name(m) for m in batch]}")
 
         # Run all models in this batch concurrently
         tasks = [asyncio.create_task(run_model(m)) for m in batch]
@@ -321,7 +339,7 @@ YOUR RESPONSE:"""
 async def stream_peer_reviews_live(question: str, responses: dict[str, ModelResponse], on_token_callback, on_complete_callback):
     """
     Stream peer reviews with live token updates.
-    Uses VRAM-aware batching to avoid GPU memory exhaustion.
+    Runs all reviewers in parallel unless total VRAM exceeds the limit.
 
     Args:
         question: The original question
@@ -329,13 +347,26 @@ async def stream_peer_reviews_live(question: str, responses: dict[str, ModelResp
         on_token_callback: async function(partial_reviews: dict) called on each token
         on_complete_callback: async function(reviewer, review, all_reviews) called when review completes
     """
+    from config import MAX_CONCURRENT_VRAM_GB
+
     reviewers = list(responses.keys())
-    batches = create_vram_batches(reviewers)
+
+    # Calculate total VRAM needed
+    total_vram = sum(get_model_vram(r) for r in reviewers)
+
+    # Only use batching if total VRAM exceeds the limit
+    if total_vram <= MAX_CONCURRENT_VRAM_GB:
+        batches = [reviewers]
+        execution_mode = "PARALLEL"
+    else:
+        batches = create_vram_batches(reviewers)
+        execution_mode = "BATCHED"
 
     logger.info("=" * 60)
     logger.info("STAGE 2: PEER REVIEWS (LIVE STREAMING)")
     logger.info(f"Each of {len(responses)} models reviewing {len(responses)-1} responses")
-    logger.info(f"Running in {len(batches)} batch(es)")
+    logger.info(f"Total VRAM: ~{total_vram:.0f}GB | Limit: {MAX_CONCURRENT_VRAM_GB}GB")
+    logger.info(f"Execution mode: {execution_mode} ({len(batches)} batch{'es' if len(batches) > 1 else ''})")
     logger.info("=" * 60)
 
     partial_reviews = {m: "" for m in responses.keys()}
@@ -398,9 +429,12 @@ ANALYSIS:
         await on_complete_callback(reviewer, review, complete_reviews)
         return review
 
-    # Run reviewers in VRAM-aware batches
+    # Run reviewers - in parallel if single batch, or sequentially by batch
     for batch_idx, batch in enumerate(batches):
-        logger.info(f"Running review batch {batch_idx + 1}/{len(batches)}: {[get_display_name(m) for m in batch]}")
+        if len(batches) == 1:
+            logger.info(f"Running all {len(batch)} reviewers in parallel...")
+        else:
+            logger.info(f"Running review batch {batch_idx + 1}/{len(batches)}: {[get_display_name(m) for m in batch]}")
 
         tasks = [asyncio.create_task(review_model(r)) for r in batch]
         await asyncio.gather(*tasks)
