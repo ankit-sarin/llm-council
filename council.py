@@ -17,6 +17,8 @@ from config import (
     CHAIRMAN_MODEL,
     COUNCIL_MODELS,
     get_display_name,
+    get_model_vram,
+    create_vram_batches,
 )
 
 # Configure logging
@@ -225,23 +227,53 @@ YOUR RESPONSE:"""
     return responses
 
 
-async def stream_initial_responses_live(question: str, models: list[str], on_token_callback, on_complete_callback):
+async def stream_initial_responses_live(
+    question: str,
+    models: list[str],
+    on_token_callback,
+    on_complete_callback,
+    document_text: str | None = None
+):
     """
     Stream initial responses with live token updates.
+    Uses VRAM-aware batching to avoid GPU memory exhaustion.
 
     Args:
         question: The question to ask the council
         models: List of model names
         on_token_callback: async function(partial_responses: dict) called on each token
         on_complete_callback: async function(model, response, all_responses) called when model completes
+        document_text: Optional text from an uploaded document to analyze
     """
+    # Create VRAM-aware batches
+    batches = create_vram_batches(models)
+
     logger.info("=" * 60)
     logger.info("STAGE 1: INITIAL RESPONSES (LIVE STREAMING)")
     logger.info(f"Question: {question[:100]}{'...' if len(question) > 100 else ''}")
-    logger.info(f"Council members: {len(models)}")
+    if document_text:
+        logger.info(f"Document: {len(document_text)} characters provided")
+    logger.info(f"Council members: {len(models)} in {len(batches)} batch(es)")
+    for i, batch in enumerate(batches):
+        batch_vram = sum(get_model_vram(m) for m in batch)
+        logger.info(f"  Batch {i+1}: {[get_display_name(m) for m in batch]} (~{batch_vram:.0f}GB)")
     logger.info("=" * 60)
 
-    prompt = f"""You are a member of an expert council deliberating on the following question.
+    # Build prompt - different format when document is provided
+    if document_text:
+        # When a document is uploaded, ask the council to analyze it
+        prompt = f"""You are a member of an expert council. A document has been provided for analysis.
+Based on the following document, answer this question thoughtfully and thoroughly.
+
+QUESTION: {question}
+
+DOCUMENT:
+{document_text}
+
+YOUR RESPONSE:"""
+    else:
+        # Standard prompt without document
+        prompt = f"""You are a member of an expert council deliberating on the following question.
 Provide your best, most thoughtful answer. Be thorough but concise.
 
 QUESTION: {question}
@@ -251,7 +283,6 @@ YOUR RESPONSE:"""
     # Track partial and complete responses
     partial_responses = {m: "" for m in models}
     complete_responses = {}
-    start_times = {m: time.perf_counter() for m in models}
 
     # Lock for thread-safe updates
     import threading
@@ -270,9 +301,18 @@ YOUR RESPONSE:"""
         await on_complete_callback(model, response, complete_responses)
         return response
 
-    # Run all models concurrently
-    tasks = [asyncio.create_task(run_model(m)) for m in models]
-    await asyncio.gather(*tasks)
+    # Run models in VRAM-aware batches
+    for batch_idx, batch in enumerate(batches):
+        logger.info(f"Running batch {batch_idx + 1}/{len(batches)}: {[get_display_name(m) for m in batch]}")
+
+        # Run all models in this batch concurrently
+        tasks = [asyncio.create_task(run_model(m)) for m in batch]
+        await asyncio.gather(*tasks)
+
+        # Small delay between batches to let GPU memory clear
+        if batch_idx < len(batches) - 1:
+            logger.info("Waiting for GPU memory to clear before next batch...")
+            await asyncio.sleep(2)
 
     logger.info(f"Stage 1 complete. {len(complete_responses)} responses collected.")
     return complete_responses
@@ -281,6 +321,7 @@ YOUR RESPONSE:"""
 async def stream_peer_reviews_live(question: str, responses: dict[str, ModelResponse], on_token_callback, on_complete_callback):
     """
     Stream peer reviews with live token updates.
+    Uses VRAM-aware batching to avoid GPU memory exhaustion.
 
     Args:
         question: The original question
@@ -288,9 +329,13 @@ async def stream_peer_reviews_live(question: str, responses: dict[str, ModelResp
         on_token_callback: async function(partial_reviews: dict) called on each token
         on_complete_callback: async function(reviewer, review, all_reviews) called when review completes
     """
+    reviewers = list(responses.keys())
+    batches = create_vram_batches(reviewers)
+
     logger.info("=" * 60)
     logger.info("STAGE 2: PEER REVIEWS (LIVE STREAMING)")
     logger.info(f"Each of {len(responses)} models reviewing {len(responses)-1} responses")
+    logger.info(f"Running in {len(batches)} batch(es)")
     logger.info("=" * 60)
 
     partial_reviews = {m: "" for m in responses.keys()}
@@ -353,8 +398,16 @@ ANALYSIS:
         await on_complete_callback(reviewer, review, complete_reviews)
         return review
 
-    tasks = [asyncio.create_task(review_model(r)) for r in responses.keys()]
-    await asyncio.gather(*tasks)
+    # Run reviewers in VRAM-aware batches
+    for batch_idx, batch in enumerate(batches):
+        logger.info(f"Running review batch {batch_idx + 1}/{len(batches)}: {[get_display_name(m) for m in batch]}")
+
+        tasks = [asyncio.create_task(review_model(r)) for r in batch]
+        await asyncio.gather(*tasks)
+
+        if batch_idx < len(batches) - 1:
+            logger.info("Waiting for GPU memory to clear before next batch...")
+            await asyncio.sleep(2)
 
     logger.info("Stage 2 complete.")
     return complete_reviews
@@ -640,6 +693,7 @@ async def get_chairman_synthesis(
     responses: dict[str, ModelResponse],
     reviews: dict[str, PeerReview],
     consensus: ConsensusScore | None = None,
+    document_filename: str | None = None,
 ) -> str:
     """
     Get final synthesis from the chairman (Claude Opus).
@@ -649,6 +703,7 @@ async def get_chairman_synthesis(
         responses: All council member responses
         reviews: All peer reviews
         consensus: Optional consensus score to guide synthesis emphasis
+        document_filename: Optional filename if responses were based on an uploaded document
 
     Returns:
         Chairman's synthesized answer
@@ -656,6 +711,8 @@ async def get_chairman_synthesis(
     logger.info("=" * 60)
     logger.info("STAGE 3: CHAIRMAN SYNTHESIS")
     logger.info(f"Chairman: {get_display_name(CHAIRMAN_MODEL)}")
+    if document_filename:
+        logger.info(f"Document analyzed: {document_filename}")
     if consensus:
         logger.info(f"Consensus level: {consensus.level} ({consensus.score})")
     logger.info("=" * 60)
@@ -697,11 +754,19 @@ IMPORTANT: The council shows LOW CONSENSUS on this topic. This indicates the que
 - Present multiple perspectives fairly rather than forcing artificial agreement
 """
 
+    # Add document context if a document was analyzed
+    document_context = ""
+    if document_filename:
+        document_context = f"""
+NOTE: The council members analyzed an uploaded document "{document_filename}" to answer this question.
+Their responses are based on the content of that document.
+"""
+
     prompt = f"""You are the Chairman of an expert council. Your council members have deliberated on a question and reviewed each other's responses. Your task is to synthesize the best possible final answer.
 
 ORIGINAL QUESTION:
 {question}
-{consensus_context}
+{document_context}{consensus_context}
 COUNCIL MEMBER RESPONSES:
 {responses_text}
 
