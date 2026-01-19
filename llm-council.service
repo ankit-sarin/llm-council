@@ -1,0 +1,21 @@
+[Unit]
+Description=LLM Council - Multi-model debate system
+After=network.target ollama.service
+Wants=ollama.service
+
+[Service]
+Type=simple
+User=ankitsarin
+Group=ankitsarin
+WorkingDirectory=/home/ankitsarin/projects/llm-council
+Environment="PATH=/home/ankitsarin/projects/llm-council/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="VIRTUAL_ENV=/home/ankitsarin/projects/llm-council/venv"
+EnvironmentFile=/home/ankitsarin/projects/llm-council/.env
+ExecStart=/home/ankitsarin/projects/llm-council/venv/bin/python app.py
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/ankitsarin/projects/llm-council/logs/council.log
+StandardError=append:/home/ankitsarin/projects/llm-council/logs/council.log
+
+[Install]
+WantedBy=multi-user.target
