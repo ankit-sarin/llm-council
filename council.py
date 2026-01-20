@@ -56,6 +56,16 @@ class ConsensusScore:
 
 
 @dataclass
+class ResponseComposition:
+    """Tracks the source composition of the chairman's synthesis."""
+    council_contribution: float  # 0-100, percentage from council model responses
+    chairman_independent: float  # 0-100, percentage from chairman's own analysis
+    web_search_used: float  # 0-100, percentage from web search
+    web_searches_performed: list[str]  # List of search queries performed
+    chairman_insights: list[str]  # Key insights added by chairman independently
+
+
+@dataclass
 class CouncilResult:
     """Complete results from a council session."""
     question: str
@@ -64,6 +74,7 @@ class CouncilResult:
     synthesis: str
     total_elapsed: float
     consensus: ConsensusScore | None = None
+    composition: ResponseComposition | None = None
 
 
 # --- Ollama Calls ---
@@ -722,15 +733,79 @@ def calculate_consensus(reviews: dict[str, PeerReview], responses: dict[str, Mod
 
 # --- Chairman Synthesis ---
 
+# Web search tool definition for the chairman
+WEB_SEARCH_TOOL = {
+    "name": "web_search",
+    "description": "Search the web for current information to supplement council responses. Use this when you need to verify facts, get up-to-date information, or find information the council members may have missed.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "The search query to look up"
+            }
+        },
+        "required": ["query"]
+    }
+}
+
+
+async def _perform_web_search(query: str) -> str:
+    """
+    Perform a web search using a simple search API.
+    Returns formatted search results.
+    """
+    import urllib.parse
+    import urllib.request
+    import json
+
+    logger.info(f"[Chairman] Web search: {query}")
+
+    try:
+        # Use DuckDuckGo Instant Answer API (free, no key required)
+        encoded_query = urllib.parse.quote(query)
+        url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1"
+
+        req = urllib.request.Request(url, headers={'User-Agent': 'LLM-Council/1.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode())
+
+        results = []
+
+        # Abstract (main summary)
+        if data.get("Abstract"):
+            results.append(f"Summary: {data['Abstract']}")
+            if data.get("AbstractSource"):
+                results.append(f"Source: {data['AbstractSource']}")
+
+        # Related topics
+        if data.get("RelatedTopics"):
+            results.append("\nRelated information:")
+            for topic in data["RelatedTopics"][:5]:
+                if isinstance(topic, dict) and topic.get("Text"):
+                    results.append(f"- {topic['Text'][:200]}")
+
+        if not results:
+            return f"No results found for: {query}"
+
+        return "\n".join(results)
+
+    except Exception as e:
+        logger.warning(f"Web search failed: {e}")
+        return f"Web search failed: {e}"
+
+
 async def get_chairman_synthesis(
     question: str,
     responses: dict[str, ModelResponse],
     reviews: dict[str, PeerReview],
     consensus: ConsensusScore | None = None,
     document_filename: str | None = None,
-) -> str:
+    enable_independent_thinking: bool = True,
+    enable_web_search: bool = True,
+) -> tuple[str, ResponseComposition]:
     """
-    Get final synthesis from the chairman (Claude Opus).
+    Get final synthesis from the chairman (Claude Opus) with independent thinking and web search.
 
     Args:
         question: The original question
@@ -738,18 +813,26 @@ async def get_chairman_synthesis(
         reviews: All peer reviews
         consensus: Optional consensus score to guide synthesis emphasis
         document_filename: Optional filename if responses were based on an uploaded document
+        enable_independent_thinking: Allow chairman to add independent analysis
+        enable_web_search: Allow chairman to search the web for additional info
 
     Returns:
-        Chairman's synthesized answer
+        Tuple of (synthesis text, ResponseComposition)
     """
     logger.info("=" * 60)
     logger.info("STAGE 3: CHAIRMAN SYNTHESIS")
     logger.info(f"Chairman: {get_display_name(CHAIRMAN_MODEL)}")
+    logger.info(f"Independent thinking: {'enabled' if enable_independent_thinking else 'disabled'}")
+    logger.info(f"Web search: {'enabled' if enable_web_search else 'disabled'}")
     if document_filename:
         logger.info(f"Document analyzed: {document_filename}")
     if consensus:
         logger.info(f"Consensus level: {consensus.level} ({consensus.score})")
     logger.info("=" * 60)
+
+    # Track composition
+    web_searches_performed = []
+    chairman_insights = []
 
     # Format responses with model names (no longer anonymous for chairman)
     responses_text = ""
@@ -796,6 +879,33 @@ NOTE: The council members analyzed an uploaded document "{document_filename}" to
 Their responses are based on the content of that document.
 """
 
+    # Build independent thinking instructions
+    independent_thinking_instructions = ""
+    if enable_independent_thinking:
+        independent_thinking_instructions = """
+CHAIRMAN'S INDEPENDENT ANALYSIS:
+As Chairman, you are not limited to just summarizing the council's responses. You should:
+- Add your own expert insights and analysis that go beyond what the council provided
+- Identify gaps in the council's responses and fill them with your own knowledge
+- Correct any factual errors you notice, even if the council members agreed on them
+- Provide additional context or nuances the council may have missed
+
+When you add independent insights, clearly mark them with [CHAIRMAN'S INSIGHT] so users know this came from your analysis rather than the council.
+"""
+
+    # Build web search instructions
+    web_search_instructions = ""
+    if enable_web_search:
+        web_search_instructions = """
+WEB SEARCH CAPABILITY:
+You have access to web search to verify facts or find current information. Use it when:
+- Council responses conflict and you need to verify which is correct
+- The question involves recent events or rapidly changing information
+- You want to supplement the council's knowledge with additional sources
+
+When you use web search, mark information from it with [WEB SOURCE] so users know its origin.
+"""
+
     prompt = f"""You are the Chairman of an expert council. Your council members have deliberated on a question and reviewed each other's responses. Your task is to synthesize the best possible final answer.
 
 ORIGINAL QUESTION:
@@ -806,10 +916,10 @@ COUNCIL MEMBER RESPONSES:
 
 PEER REVIEWS:
 {reviews_text}
-{disagreement_emphasis}
+{disagreement_emphasis}{independent_thinking_instructions}{web_search_instructions}
 As Chairman, please provide:
 
-1. SYNTHESIS: The best comprehensive answer, combining the strongest elements from all responses while correcting any errors noted in reviews.
+1. SYNTHESIS: The best comprehensive answer, combining the strongest elements from all responses while correcting any errors noted in reviews.{' Add your own independent insights where valuable.' if enable_independent_thinking else ''}
 
 2. KEY CONTRIBUTORS: Note which council members provided particularly valuable insights and what they contributed.
 
@@ -817,34 +927,342 @@ As Chairman, please provide:
 
 4. AREAS OF DISAGREEMENT: Where did opinions differ, and how did you resolve this?{' Pay particular attention here given the low consensus score.' if consensus and consensus.level == 'low' else ''}
 
+5. CHAIRMAN'S ADDITIONS: List any independent insights you added or web searches you performed to enhance the answer.
+
 Please begin your synthesis:"""
 
     # Call Claude via Anthropic API
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         logger.error("ANTHROPIC_API_KEY not set!")
-        return "[Error: ANTHROPIC_API_KEY environment variable not set]"
+        default_composition = ResponseComposition(
+            council_contribution=100.0, chairman_independent=0.0, web_search_used=0.0,
+            web_searches_performed=[], chairman_insights=[]
+        )
+        return "[Error: ANTHROPIC_API_KEY environment variable not set]", default_composition
 
     logger.info("Calling Claude Opus for synthesis...")
     start = time.perf_counter()
 
     try:
         client = Anthropic(api_key=api_key)
-        response = await asyncio.to_thread(
-            client.messages.create,
-            model=CHAIRMAN_MODEL,
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}],
-        )
+
+        # Build tools list if web search is enabled
+        tools = [WEB_SEARCH_TOOL] if enable_web_search else []
+
+        messages = [{"role": "user", "content": prompt}]
+        synthesis = ""
+
+        # Handle tool use loop (for web search)
+        max_iterations = 5  # Limit web searches
+        for iteration in range(max_iterations):
+            if tools:
+                response = await asyncio.to_thread(
+                    client.messages.create,
+                    model=CHAIRMAN_MODEL,
+                    max_tokens=4096,
+                    messages=messages,
+                    tools=tools,
+                )
+            else:
+                response = await asyncio.to_thread(
+                    client.messages.create,
+                    model=CHAIRMAN_MODEL,
+                    max_tokens=4096,
+                    messages=messages,
+                )
+
+            # Check if we need to handle tool use
+            if response.stop_reason == "tool_use":
+                # Process tool calls
+                tool_results = []
+                assistant_content = response.content
+
+                for block in response.content:
+                    if block.type == "tool_use" and block.name == "web_search":
+                        query = block.input.get("query", "")
+                        web_searches_performed.append(query)
+                        search_result = await _perform_web_search(query)
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": search_result
+                        })
+
+                # Add assistant response and tool results to messages
+                messages.append({"role": "assistant", "content": assistant_content})
+                messages.append({"role": "user", "content": tool_results})
+            else:
+                # No more tool use, extract final synthesis
+                for block in response.content:
+                    if hasattr(block, 'text'):
+                        synthesis = block.text
+                        break
+                break
+
         elapsed = time.perf_counter() - start
-        synthesis = response.content[0].text
         logger.info(f"Chairman synthesis complete in {elapsed:.1f}s ({len(synthesis)} chars)")
-        return synthesis
+        logger.info(f"Web searches performed: {len(web_searches_performed)}")
+
+        # Parse chairman insights from synthesis
+        import re
+        insight_matches = re.findall(r'\[CHAIRMAN\'S INSIGHT\][:\s]*([^\[]+?)(?=\[|$)', synthesis, re.IGNORECASE | re.DOTALL)
+        chairman_insights = [m.strip()[:200] for m in insight_matches if m.strip()][:5]
+
+        # Calculate composition percentages
+        # Base calculation on presence of markers and searches
+        has_web_content = len(web_searches_performed) > 0 or "[WEB SOURCE]" in synthesis.upper()
+        has_chairman_insights = len(chairman_insights) > 0 or "[CHAIRMAN'S INSIGHT]" in synthesis.upper()
+
+        if has_web_content and has_chairman_insights:
+            council_contribution = 60.0
+            chairman_independent = 25.0
+            web_search_used = 15.0
+        elif has_chairman_insights:
+            council_contribution = 70.0
+            chairman_independent = 30.0
+            web_search_used = 0.0
+        elif has_web_content:
+            council_contribution = 75.0
+            chairman_independent = 10.0
+            web_search_used = 15.0
+        else:
+            council_contribution = 90.0
+            chairman_independent = 10.0
+            web_search_used = 0.0
+
+        composition = ResponseComposition(
+            council_contribution=council_contribution,
+            chairman_independent=chairman_independent,
+            web_search_used=web_search_used,
+            web_searches_performed=web_searches_performed,
+            chairman_insights=chairman_insights
+        )
+
+        return synthesis, composition
 
     except Exception as e:
         elapsed = time.perf_counter() - start
         logger.error(f"Chairman synthesis failed after {elapsed:.1f}s: {e}")
-        return f"[Error during synthesis: {e}]"
+        default_composition = ResponseComposition(
+            council_contribution=100.0, chairman_independent=0.0, web_search_used=0.0,
+            web_searches_performed=[], chairman_insights=[]
+        )
+        return f"[Error during synthesis: {e}]", default_composition
+
+
+async def get_chairman_early_synthesis(
+    question: str,
+    responses: dict[str, ModelResponse],
+    document_filename: str | None = None,
+    enable_independent_thinking: bool = True,
+    enable_web_search: bool = True,
+) -> tuple[str, ResponseComposition]:
+    """
+    Get chairman synthesis without peer reviews (for early termination).
+
+    This is used when the user stops deliberation early and wants
+    the chairman to synthesize based only on available responses.
+
+    Args:
+        question: The original question
+        responses: Available council member responses (may be partial)
+        document_filename: Optional filename if responses were based on an uploaded document
+        enable_independent_thinking: Allow chairman to add independent analysis
+        enable_web_search: Allow chairman to search the web for additional info
+
+    Returns:
+        Tuple of (synthesis text, ResponseComposition)
+    """
+    logger.info("=" * 60)
+    logger.info("EARLY SYNTHESIS (Deliberation stopped by user)")
+    logger.info(f"Chairman: {get_display_name(CHAIRMAN_MODEL)}")
+    logger.info(f"Available responses: {len(responses)}")
+    logger.info("=" * 60)
+
+    if not responses:
+        default_composition = ResponseComposition(
+            council_contribution=0.0, chairman_independent=100.0, web_search_used=0.0,
+            web_searches_performed=[], chairman_insights=["No council responses available"]
+        )
+        return "No council responses were collected before deliberation was stopped.", default_composition
+
+    # Track composition
+    web_searches_performed = []
+    chairman_insights = []
+
+    # Format available responses
+    responses_text = ""
+    for model, response in responses.items():
+        display_name = get_display_name(model)
+        responses_text += f"=== {display_name} ({response.elapsed_seconds:.1f}s) ===\n"
+        responses_text += f"{response.content}\n\n"
+
+    # Add document context if a document was analyzed
+    document_context = ""
+    if document_filename:
+        document_context = f"""
+NOTE: The council members analyzed an uploaded document "{document_filename}" to answer this question.
+"""
+
+    # Build independent thinking instructions
+    independent_thinking_instructions = ""
+    if enable_independent_thinking:
+        independent_thinking_instructions = """
+CHAIRMAN'S INDEPENDENT ANALYSIS:
+Since the full deliberation was stopped early, your independent analysis is especially important.
+- Add your own expert insights to supplement the limited council input
+- Fill in any gaps that might exist due to the incomplete deliberation
+- Provide a comprehensive answer using your own knowledge
+
+When you add independent insights, clearly mark them with [CHAIRMAN'S INSIGHT].
+"""
+
+    # Build web search instructions
+    web_search_instructions = ""
+    if enable_web_search:
+        web_search_instructions = """
+WEB SEARCH CAPABILITY:
+You have access to web search. Given the limited council input, you may want to search
+for additional information to provide a more complete answer.
+Mark information from web search with [WEB SOURCE].
+"""
+
+    prompt = f"""You are the Chairman of an expert council. The deliberation was stopped early by the user, so you have limited input from the council. Please synthesize the best possible answer using the available responses and your own expertise.
+
+ORIGINAL QUESTION:
+{question}
+{document_context}
+AVAILABLE COUNCIL RESPONSES ({len(responses)} of expected):
+{responses_text}
+
+NOTE: Peer reviews were not completed due to early termination.
+{independent_thinking_instructions}{web_search_instructions}
+As Chairman, please provide:
+
+1. SYNTHESIS: The best answer possible given the available responses. Supplement with your own knowledge where the council input is limited.
+
+2. AVAILABLE CONTRIBUTORS: Note which council members provided input and what they contributed.
+
+3. CHAIRMAN'S ADDITIONS: Since the deliberation was limited, explain what insights you've added independently.
+
+Please begin your synthesis:"""
+
+    # Call Claude via Anthropic API
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        logger.error("ANTHROPIC_API_KEY not set!")
+        default_composition = ResponseComposition(
+            council_contribution=100.0, chairman_independent=0.0, web_search_used=0.0,
+            web_searches_performed=[], chairman_insights=[]
+        )
+        return "[Error: ANTHROPIC_API_KEY environment variable not set]", default_composition
+
+    logger.info("Calling Claude Opus for early synthesis...")
+    start = time.perf_counter()
+
+    try:
+        client = Anthropic(api_key=api_key)
+
+        # Build tools list if web search is enabled
+        tools = [WEB_SEARCH_TOOL] if enable_web_search else []
+
+        messages = [{"role": "user", "content": prompt}]
+        synthesis = ""
+
+        # Handle tool use loop (for web search)
+        max_iterations = 5
+        for iteration in range(max_iterations):
+            if tools:
+                response = await asyncio.to_thread(
+                    client.messages.create,
+                    model=CHAIRMAN_MODEL,
+                    max_tokens=4096,
+                    messages=messages,
+                    tools=tools,
+                )
+            else:
+                response = await asyncio.to_thread(
+                    client.messages.create,
+                    model=CHAIRMAN_MODEL,
+                    max_tokens=4096,
+                    messages=messages,
+                )
+
+            if response.stop_reason == "tool_use":
+                tool_results = []
+                assistant_content = response.content
+
+                for block in response.content:
+                    if block.type == "tool_use" and block.name == "web_search":
+                        query = block.input.get("query", "")
+                        web_searches_performed.append(query)
+                        search_result = await _perform_web_search(query)
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": search_result
+                        })
+
+                messages.append({"role": "assistant", "content": assistant_content})
+                messages.append({"role": "user", "content": tool_results})
+            else:
+                for block in response.content:
+                    if hasattr(block, 'text'):
+                        synthesis = block.text
+                        break
+                break
+
+        elapsed = time.perf_counter() - start
+        logger.info(f"Early synthesis complete in {elapsed:.1f}s ({len(synthesis)} chars)")
+
+        # Parse chairman insights
+        import re
+        insight_matches = re.findall(r'\[CHAIRMAN\'S INSIGHT\][:\s]*([^\[]+?)(?=\[|$)', synthesis, re.IGNORECASE | re.DOTALL)
+        chairman_insights = [m.strip()[:200] for m in insight_matches if m.strip()][:5]
+
+        # For early synthesis, chairman contributes more
+        has_web_content = len(web_searches_performed) > 0 or "[WEB SOURCE]" in synthesis.upper()
+        has_chairman_insights = len(chairman_insights) > 0 or "[CHAIRMAN'S INSIGHT]" in synthesis.upper()
+
+        # Scale council contribution based on how many responses we have
+        base_council = min(50.0, len(responses) * 15.0)  # ~15% per response, max 50%
+
+        if has_web_content and has_chairman_insights:
+            council_contribution = base_council
+            chairman_independent = 70.0 - base_council
+            web_search_used = 30.0
+        elif has_chairman_insights:
+            council_contribution = base_council
+            chairman_independent = 100.0 - base_council
+            web_search_used = 0.0
+        elif has_web_content:
+            council_contribution = base_council
+            chairman_independent = 50.0 - base_council
+            web_search_used = 50.0
+        else:
+            council_contribution = base_council + 20.0
+            chairman_independent = 80.0 - base_council
+            web_search_used = 0.0
+
+        composition = ResponseComposition(
+            council_contribution=council_contribution,
+            chairman_independent=chairman_independent,
+            web_search_used=web_search_used,
+            web_searches_performed=web_searches_performed,
+            chairman_insights=chairman_insights
+        )
+
+        return synthesis, composition
+
+    except Exception as e:
+        elapsed = time.perf_counter() - start
+        logger.error(f"Early synthesis failed after {elapsed:.1f}s: {e}")
+        default_composition = ResponseComposition(
+            council_contribution=100.0, chairman_independent=0.0, web_search_used=0.0,
+            web_searches_performed=[], chairman_insights=[]
+        )
+        return f"[Error during synthesis: {e}]", default_composition
 
 
 # --- Main Orchestration ---
@@ -877,8 +1295,11 @@ async def run_council(question: str, models: list[str] | None = None) -> Council
     # Stage 2: Peer reviews
     reviews = await get_peer_reviews(question, responses)
 
+    # Calculate consensus
+    consensus = calculate_consensus(reviews, responses)
+
     # Stage 3: Chairman synthesis
-    synthesis = await get_chairman_synthesis(question, responses, reviews)
+    synthesis, composition = await get_chairman_synthesis(question, responses, reviews, consensus)
 
     total_elapsed = time.perf_counter() - total_start
 
@@ -892,6 +1313,8 @@ async def run_council(question: str, models: list[str] | None = None) -> Council
         reviews=reviews,
         synthesis=synthesis,
         total_elapsed=total_elapsed,
+        consensus=consensus,
+        composition=composition,
     )
 
 

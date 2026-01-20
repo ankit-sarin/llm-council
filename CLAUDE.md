@@ -114,6 +114,14 @@ class ConsensusScore:
     disagreement_areas: list[str]  # Specific disagreements
 
 @dataclass
+class ResponseComposition:
+    council_contribution: float  # 0-100, percentage from council models
+    chairman_independent: float  # 0-100, percentage from chairman's own analysis
+    web_search_used: float       # 0-100, percentage from web search
+    web_searches_performed: list[str]  # Search queries performed
+    chairman_insights: list[str]       # Key insights added by chairman
+
+@dataclass
 class CouncilResult:
     question: str
     responses: dict[str, ModelResponse]
@@ -124,6 +132,29 @@ class CouncilResult:
 ```
 
 ## Features
+
+### Chairman Independent Thinking & Web Search
+The chairman (Claude Opus 4.5) can now:
+- Add independent insights beyond just summarizing council responses
+- Perform web searches to verify facts or get current information
+- Mark contributions with `[CHAIRMAN'S INSIGHT]` or `[WEB SOURCE]` tags
+
+Response composition is tracked and displayed in a meter showing:
+- **Council Models** (blue): Percentage derived from local model responses
+- **Chairman Independent** (purple): Percentage from chairman's own analysis
+- **Web Search** (orange): Percentage from web search results
+
+### Stop Deliberation
+Users can stop deliberation at any time using the "Stop Deliberation" button:
+1. Click "⏹️ Stop Deliberation" during any stage
+2. Choose between:
+   - **Clear Session**: Discard all progress and start fresh
+   - **Synthesize Now**: Have the chairman synthesize with available data
+
+When stopped early, the chairman uses `get_chairman_early_synthesis()` which:
+- Works with whatever responses have been collected
+- Adds more independent analysis to compensate for limited council input
+- Can perform web searches to supplement incomplete data
 
 ### Parallel-First Execution
 Models run in parallel by default for maximum speed. Batching only activates when total VRAM would exceed the limit:
@@ -197,6 +228,8 @@ All sessions saved to `sessions/` as JSON:
 
 ### Stage 3: Chairman Synthesis
 - Claude Opus 4.5 receives all responses + reviews + consensus info
+- Can add independent insights beyond council responses (marked with `[CHAIRMAN'S INSIGHT]`)
+- Can perform web searches for verification/current info (marked with `[WEB SOURCE]`)
 - When consensus is low, emphasizes exploring disagreements
 - Notes when responses were based on an uploaded document
 - Produces:
@@ -204,6 +237,8 @@ All sessions saved to `sessions/` as JSON:
   2. Key contributors and their insights
   3. Areas of consensus
   4. Areas of disagreement and resolution
+  5. Chairman's independent additions and web searches
+- Returns both synthesis text and ResponseComposition metrics
 
 ## Key Implementation Patterns
 
@@ -278,9 +313,11 @@ ollama list
 - File info display with preview
 - Question input
 - Model checkboxes
-- Submit button
+- Submit button + Stop Deliberation button
+- Stop confirmation options (Clear Session / Synthesize Now)
 - Chairman's final answer
 - Consensus meter
+- Response composition meter
 
 ### Tab 3: Settings
 - GPU Memory Management section

@@ -20,9 +20,11 @@ from council import (
     ConsensusScore,
     ModelResponse,
     PeerReview,
+    ResponseComposition,
     get_initial_responses,
     get_peer_reviews,
     get_chairman_synthesis,
+    get_chairman_early_synthesis,
     stream_initial_responses,
     stream_peer_reviews,
     stream_initial_responses_live,
@@ -50,7 +52,9 @@ def save_session(
     models: list[str],
     document_filename: str | None = None,
     document_char_count: int | None = None,
-    document_preview: str | None = None
+    document_preview: str | None = None,
+    composition: "ResponseComposition | None" = None,
+    was_stopped_early: bool = False
 ) -> dict:
     """
     Save a council session to JSON file.
@@ -65,6 +69,8 @@ def save_session(
         document_filename: Optional filename if a document was uploaded
         document_char_count: Optional character count of the document
         document_preview: Optional first 1000 chars of document for reference
+        composition: Optional response composition metrics
+        was_stopped_early: Whether deliberation was stopped early by user
     """
     timestamp = datetime.now()
     session_id = timestamp.strftime("%Y%m%d_%H%M%S")
@@ -94,7 +100,8 @@ def save_session(
             "description": consensus.description,
             "disagreement_areas": consensus.disagreement_areas
         },
-        "synthesis": synthesis
+        "synthesis": synthesis,
+        "was_stopped_early": was_stopped_early
     }
 
     # Add document info if a file was uploaded
@@ -103,6 +110,16 @@ def save_session(
             "filename": document_filename,
             "char_count": document_char_count,
             "preview": document_preview  # First 1000 chars for reference
+        }
+
+    # Add composition info if available
+    if composition:
+        session_data["composition"] = {
+            "council_contribution": composition.council_contribution,
+            "chairman_independent": composition.chairman_independent,
+            "web_search_used": composition.web_search_used,
+            "web_searches_performed": composition.web_searches_performed,
+            "chairman_insights": composition.chairman_insights
         }
 
     filepath = SESSIONS_DIR / f"session_{session_id}.json"
@@ -396,11 +413,6 @@ def get_file_info(file_path: str) -> dict:
     }
 
 
-# --- State ---
-
-verbose_mode: bool = False
-
-
 # --- Formatting Helpers ---
 
 def format_response_tabs(responses: dict) -> str:
@@ -451,12 +463,12 @@ def format_responses_side_by_side(partial_responses: dict, complete_responses: d
             status = "⏳ generating..."
             border_color = "#FF9800"
 
-        # Escape HTML in content and truncate if too long
+        # Escape HTML in content - no truncation, rely on CSS scrolling
         content = html_module.escape(content) if content else ""
-        display_content = content if len(content) < 2000 else "..." + content[-1800:]
+        display_content = content
 
         html += f'''
-        <div style="border: 2px solid {border_color}; border-radius: 8px; padding: 12px; background: #fafafa; min-height: 200px; max-height: 400px; overflow-y: auto;">
+        <div style="border: 2px solid {border_color}; border-radius: 8px; padding: 12px; background: #fafafa; min-height: 200px; max-height: 600px; overflow-y: auto; overflow-x: hidden;">
             <div style="font-weight: bold; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 8px;">
                 {display_name} <span style="font-weight: normal; color: {'#4CAF50' if is_complete else '#FF9800'};">{status}</span>
             </div>
@@ -496,12 +508,12 @@ def format_reviews_side_by_side(partial_reviews: dict, complete_reviews: dict, m
             status = "⏳ reviewing..."
             border_color = "#FF9800"
 
-        # Escape HTML in content and truncate if too long
+        # Escape HTML in content - no truncation, rely on CSS scrolling
         content = html_module.escape(content) if content else ""
-        display_content = content if len(content) < 1500 else "..." + content[-1300:]
+        display_content = content
 
         html += f'''
-        <div style="border: 2px solid {border_color}; border-radius: 8px; padding: 12px; background: #fff8f0; min-height: 150px; max-height: 350px; overflow-y: auto;">
+        <div style="border: 2px solid {border_color}; border-radius: 8px; padding: 12px; background: #fff8f0; min-height: 150px; max-height: 600px; overflow-y: auto; overflow-x: hidden;">
             <div style="font-weight: bold; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 8px;">
                 {display_name} <span style="font-weight: normal; color: {'#4CAF50' if is_complete else '#FF9800'};">{status}</span>
             </div>
@@ -540,28 +552,6 @@ def format_synthesis(synthesis: str) -> str:
 
     chairman_name = get_display_name(CHAIRMAN_MODEL)
     return f"## {chairman_name}\n\n{synthesis}"
-
-
-def format_synthesis_brief(synthesis: str) -> str:
-    """Format chairman synthesis for Tab 1 (only the main answer, no meta-analysis)."""
-    if not synthesis:
-        return "*Awaiting chairman synthesis...*"
-
-    # Extract just the SYNTHESIS section, skip KEY CONTRIBUTORS, CONSENSUS, DISAGREEMENT
-    lines = synthesis.split('\n')
-    brief_lines = []
-    in_synthesis = False
-    skip_sections = ['KEY CONTRIBUTORS', 'AREAS OF CONSENSUS', 'AREAS OF DISAGREEMENT',
-                     '2.', '3.', '4.']
-
-    for line in lines:
-        # Check if we hit a section to skip
-        should_skip = any(skip in line.upper() for skip in ['KEY CONTRIBUTOR', 'AREAS OF CONSENSUS', 'AREAS OF DISAGREEMENT'])
-        if should_skip or (line.strip().startswith(('2.', '3.', '4.')) and any(x in line.upper() for x in ['KEY', 'AREA', 'CONSENSUS', 'DISAGREEMENT'])):
-            break
-        brief_lines.append(line)
-
-    return '\n'.join(brief_lines).strip()
 
 
 def format_consensus_meter(consensus: ConsensusScore | None) -> str:
@@ -630,6 +620,81 @@ def calculate_agreement_summary(reviews: dict, responses: dict = None) -> str:
     return f"**{num_reviewers} council members** participated in peer review."
 
 
+def format_composition_meter(composition: ResponseComposition | None) -> str:
+    """Generate a visual composition meter showing source breakdown."""
+    if composition is None:
+        return "*Calculating response composition...*"
+
+    # Colors for each source
+    council_color = "#2196F3"  # Blue for council
+    chairman_color = "#9C27B0"  # Purple for chairman
+    web_color = "#FF9800"  # Orange for web
+
+    # Build the stacked bar
+    council_pct = composition.council_contribution
+    chairman_pct = composition.chairman_independent
+    web_pct = composition.web_search_used
+
+    html = f'''
+<div style="background: #f5f5f5; border: 2px solid #9C27B0; border-radius: 12px; padding: 16px; margin: 8px 0;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span style="font-weight: bold; color: #333;">Response Composition</span>
+    </div>
+
+    <!-- Stacked bar -->
+    <div style="background: #e0e0e0; border-radius: 8px; height: 24px; overflow: hidden; margin-bottom: 12px; display: flex;">
+        <div style="background: {council_color}; height: 100%; width: {council_pct}%;" title="Council Models: {council_pct:.0f}%"></div>
+        <div style="background: {chairman_color}; height: 100%; width: {chairman_pct}%;" title="Chairman Independent: {chairman_pct:.0f}%"></div>
+        <div style="background: {web_color}; height: 100%; width: {web_pct}%;" title="Web Search: {web_pct:.0f}%"></div>
+    </div>
+
+    <!-- Legend -->
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.9em;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <div style="width: 16px; height: 16px; background: {council_color}; border-radius: 4px;"></div>
+            <span>Council Models: <strong>{council_pct:.0f}%</strong></span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <div style="width: 16px; height: 16px; background: {chairman_color}; border-radius: 4px;"></div>
+            <span>Chairman Independent: <strong>{chairman_pct:.0f}%</strong></span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <div style="width: 16px; height: 16px; background: {web_color}; border-radius: 4px;"></div>
+            <span>Web Search: <strong>{web_pct:.0f}%</strong></span>
+        </div>
+    </div>
+'''
+
+    # Show web searches if any were performed
+    if composition.web_searches_performed:
+        html += '''
+    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ddd;">
+        <strong style="color: #333;">Web Searches Performed:</strong>
+        <ul style="margin: 8px 0 0 0; padding-left: 20px; color: #666;">
+'''
+        for query in composition.web_searches_performed[:5]:
+            import html as html_module
+            html += f'            <li>{html_module.escape(query)}</li>\n'
+        html += '        </ul>\n    </div>\n'
+
+    # Show chairman insights if any
+    if composition.chairman_insights:
+        html += '''
+    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ddd;">
+        <strong style="color: #333;">Chairman's Independent Insights:</strong>
+        <ul style="margin: 8px 0 0 0; padding-left: 20px; color: #666;">
+'''
+        for insight in composition.chairman_insights[:3]:
+            import html as html_module
+            # Truncate long insights
+            display_insight = insight[:150] + "..." if len(insight) > 150 else insight
+            html += f'            <li>{html_module.escape(display_insight)}</li>\n'
+        html += '        </ul>\n    </div>\n'
+
+    html += '</div>'
+    return html
+
+
 # --- Main Council Runner ---
 
 async def run_council_streaming(
@@ -637,7 +702,8 @@ async def run_council_streaming(
     selected_models: list[str],
     update_queue,
     document_text: str | None = None,
-    document_filename: str | None = None
+    document_filename: str | None = None,
+    stop_event: asyncio.Event | None = None
 ):
     """
     Run the council with live token streaming updates via queue.
@@ -649,16 +715,18 @@ async def run_council_streaming(
         update_queue: Async queue for streaming UI updates
         document_text: Optional text extracted from an uploaded document
         document_filename: Optional filename of the uploaded document
+        stop_event: Optional event to signal early termination
     """
     if not question.strip():
         await update_queue.put((
             "Please enter a question.",
-            "", "", "",
+            "",
             "No responses yet",
             "No reviews yet",
             "Awaiting synthesis...",
             "",
-            ""  # consensus_display_tab1
+            "",  # Composition meter
+            None  # No pending session
         ))
         return
 
@@ -669,18 +737,21 @@ async def run_council_streaming(
     if not active_models:
         await update_queue.put((
             "No council members selected! Please select at least one model.",
-            "", "", "",
+            "",
             "No models selected",
             "No reviews possible",
             "Cannot synthesize without responses",
             "",
-            ""  # consensus_display_tab1
+            "",  # Composition meter
+            None  # No pending session
         ))
         return
 
     model_names = [get_display_name(m) for m in active_models]
     complete_responses = {}
     complete_reviews = {}
+    composition = None  # Track response composition
+    was_stopped_early = False
 
     # Throttle updates to avoid overwhelming the UI
     import time as time_module
@@ -691,13 +762,12 @@ async def run_council_streaming(
     await update_queue.put((
         f"**Stage 1/3:** Generating responses ({len(active_models)} models)...",
         "",
-        "",
-        "",
         format_responses_side_by_side({m: "" for m in active_models}, {}, active_models),
         "### ⏸️ Waiting for Stage 1...\n\n*Peer reviews will begin after all responses are complete.*",
         "### ⏸️ Waiting for responses and reviews...\n\n*Chairman will synthesize after peer reviews.*",
         "",
-        ""  # consensus_display_tab1
+        "",  # Composition meter
+        None  # No pending session yet
     ))
 
     # Token callback - update UI with partial responses
@@ -714,13 +784,12 @@ async def run_council_streaming(
         await update_queue.put((
             status,
             "",
-            "",
-            "",
             format_responses_side_by_side(partial_responses, done_responses, active_models),
             "### ⏸️ Waiting for Stage 1...\n\n*Peer reviews will begin after all responses are complete.*",
             "### ⏸️ Waiting for responses and reviews...",
             "",
-            ""  # consensus_display_tab1
+            "",  # Composition meter
+            None  # No pending session yet
         ))
 
     # Complete callback
@@ -732,13 +801,12 @@ async def run_council_streaming(
         await update_queue.put((
             f"**Stage 1/3:** Generating responses ({completed}/{total} complete)...",
             "",
-            "",
-            "",
             format_responses_side_by_side({m: complete_responses.get(m, type('', (), {'content': ''})()).content if m in complete_responses else "" for m in active_models}, complete_responses, active_models),
             "### ⏸️ Waiting for Stage 1...",
             "### ⏸️ Waiting for responses and reviews...",
             "",
-            ""  # consensus_display_tab1
+            "",  # Composition meter
+            None  # No pending session yet
         ))
 
     # Run Stage 1 with live streaming
@@ -755,19 +823,69 @@ async def run_council_streaming(
         if model in responses:
             timing_summary += f"- {get_display_name(model)}: ✅ {responses[model].elapsed_seconds:.1f}s\n"
 
+    # Check if deliberation was stopped early
+    if stop_event and stop_event.is_set():
+        was_stopped_early = True
+        await update_queue.put((
+            "**Deliberation stopped by user.** Chairman is synthesizing with available responses...",
+            timing_summary,
+            format_responses_side_by_side({}, responses, active_models),
+            "### ⏹️ Peer reviews skipped (deliberation stopped)",
+            "### 🔄 Chairman is synthesizing...",
+            "",
+            "",  # Composition meter - will be filled after synthesis
+            None
+        ))
+
+        # Get early synthesis from chairman
+        synthesis, composition = await get_chairman_early_synthesis(
+            question, responses,
+            document_filename=document_filename
+        )
+
+        # Prepare session data
+        pending_session = {
+            "question": question,
+            "responses": responses,
+            "reviews": {},
+            "synthesis": synthesis,
+            "consensus": ConsensusScore(score=0, level="unknown", description="Peer reviews not completed", disagreement_areas=[]),
+            "models": active_models,
+            "document_filename": document_filename,
+            "document_char_count": len(document_text) if document_text else None,
+            "document_preview": document_text[:1000] if document_text else None,
+            "composition": composition,
+            "was_stopped_early": True
+        }
+
+        # Final results with early synthesis
+        final_status = f"**Council session complete (early termination)**\n\nActive members: {', '.join(model_names)}"
+        composition_html = format_composition_meter(composition)
+
+        await update_queue.put((
+            final_status,
+            timing_summary,
+            format_responses_side_by_side({}, responses, active_models),
+            "### ⏹️ Peer reviews skipped (deliberation stopped)",
+            format_synthesis(synthesis),
+            "*Consensus not calculated - peer reviews skipped*",
+            composition_html,
+            pending_session
+        ))
+        return
+
     # --- Stage 2: Peer Reviews with live streaming ---
     reviewer_models = list(responses.keys())
 
     await update_queue.put((
         f"**Stage 2/3:** Peer review in progress ({len(responses)} reviewers)...",
-        "",
         timing_summary,
-        "",
         format_responses_side_by_side({}, responses, active_models),
         format_reviews_side_by_side({m: "" for m in reviewer_models}, {}, reviewer_models),
         "### ⏸️ Waiting for peer reviews...\n\n*Chairman synthesis will begin after all reviews are done.*",
         "",
-        ""  # consensus_display_tab1
+        "",  # Composition meter
+        None  # No pending session yet
     ))
 
     # Token callback for Stage 2
@@ -783,14 +901,13 @@ async def run_council_streaming(
 
         await update_queue.put((
             f"**Stage 2/3:** Peer review ({completed}/{total} complete)...",
-            "",
             timing_summary,
-            "",
             format_responses_side_by_side({}, responses, active_models),
             format_reviews_side_by_side(partial_reviews, done_reviews, reviewer_models),
             "### ⏸️ Waiting for peer reviews...",
             consensus_html,
-            consensus_html  # consensus_display_tab1
+            "",  # Composition meter
+            None  # No pending session yet
         ))
 
     # Complete callback for Stage 2
@@ -802,19 +919,77 @@ async def run_council_streaming(
 
         await update_queue.put((
             f"**Stage 2/3:** Peer review ({completed}/{total} complete)...",
-            "",
             timing_summary,
-            "",
             format_responses_side_by_side({}, responses, active_models),
             format_reviews_side_by_side({m: complete_reviews.get(m, type('', (), {'analysis': ''})()).analysis if m in complete_reviews else "" for m in reviewer_models}, complete_reviews, reviewer_models),
             "### ⏸️ Waiting for peer reviews...",
             consensus_html,
-            consensus_html  # consensus_display_tab1
+            "",  # Composition meter
+            None  # No pending session yet
         ))
 
     # Run Stage 2 with live streaming
     reviews = await stream_peer_reviews_live(question, responses, on_token_stage2, on_complete_stage2)
     complete_reviews = reviews
+
+    # Check if deliberation was stopped during reviews
+    if stop_event and stop_event.is_set():
+        was_stopped_early = True
+        # Use any reviews that were completed
+        partial_consensus = calculate_consensus(complete_reviews, responses) if len(complete_reviews) >= 2 else None
+
+        await update_queue.put((
+            "**Deliberation stopped by user.** Chairman is synthesizing with available data...",
+            timing_summary,
+            format_responses_side_by_side({}, responses, active_models),
+            format_reviews_side_by_side({}, complete_reviews, reviewer_models),
+            "### 🔄 Chairman is synthesizing...",
+            format_consensus_meter(partial_consensus) if partial_consensus else "*Consensus calculation incomplete*",
+            "",  # Composition meter
+            None
+        ))
+
+        # Get synthesis with whatever reviews we have
+        if complete_reviews:
+            synthesis, composition = await get_chairman_synthesis(
+                question, responses, complete_reviews, partial_consensus,
+                document_filename=document_filename
+            )
+        else:
+            synthesis, composition = await get_chairman_early_synthesis(
+                question, responses,
+                document_filename=document_filename
+            )
+
+        # Prepare session data
+        pending_session = {
+            "question": question,
+            "responses": responses,
+            "reviews": complete_reviews,
+            "synthesis": synthesis,
+            "consensus": partial_consensus or ConsensusScore(score=0, level="unknown", description="Peer reviews incomplete", disagreement_areas=[]),
+            "models": active_models,
+            "document_filename": document_filename,
+            "document_char_count": len(document_text) if document_text else None,
+            "document_preview": document_text[:1000] if document_text else None,
+            "composition": composition,
+            "was_stopped_early": True
+        }
+
+        final_status = f"**Council session complete (early termination)**\n\nActive members: {', '.join(model_names)}"
+        composition_html = format_composition_meter(composition)
+
+        await update_queue.put((
+            final_status,
+            timing_summary,
+            format_responses_side_by_side({}, responses, active_models),
+            format_reviews_side_by_side({}, complete_reviews, reviewer_models),
+            format_synthesis(synthesis),
+            format_consensus_meter(partial_consensus) if partial_consensus else "*Consensus not fully calculated*",
+            composition_html,
+            pending_session
+        ))
+        return
 
     # --- Stage 3: Chairman Synthesis ---
     # Calculate consensus from reviews
@@ -823,48 +998,48 @@ async def run_council_streaming(
 
     await update_queue.put((
         "**Stage 3/3:** Chairman synthesizing final answer...\n\n*Claude Opus 4.5 is analyzing all responses and reviews...*",
-        "",
         timing_summary,
-        "",
         format_responses_side_by_side({}, responses, active_models),
         format_reviews_side_by_side({}, reviews, reviewer_models),
         "### 🔄 Chairman is synthesizing...\n\n*Analyzing all responses and peer reviews to create the best answer.*",
         consensus_display,
-        consensus_display  # consensus_display_tab1
+        "",  # Composition meter - will be filled after synthesis
+        None  # Session data will be set after synthesis
     ))
 
     # Pass consensus and document info to chairman
-    synthesis = await get_chairman_synthesis(
+    synthesis, composition = await get_chairman_synthesis(
         question, responses, reviews, consensus,
         document_filename=document_filename
     )
 
-    # Save session to JSON (including document info if present)
-    session_data = save_session(
-        question=question,
-        responses=responses,
-        reviews=reviews,
-        synthesis=synthesis,
-        consensus=consensus,
-        models=active_models,
-        document_filename=document_filename,
-        document_char_count=len(document_text) if document_text else None,
-        document_preview=document_text[:1000] if document_text else None
-    )
+    # Prepare session data for potential saving (but don't save automatically)
+    pending_session = {
+        "question": question,
+        "responses": responses,
+        "reviews": reviews,
+        "synthesis": synthesis,
+        "consensus": consensus,
+        "models": active_models,
+        "document_filename": document_filename,
+        "document_char_count": len(document_text) if document_text else None,
+        "document_preview": document_text[:1000] if document_text else None,
+        "composition": composition
+    }
 
     # Final results
     final_status = f"**Council session complete!**\n\nActive members: {', '.join(model_names)}"
+    composition_html = format_composition_meter(composition)
 
     await update_queue.put((
         final_status,
-        format_synthesis_brief(synthesis),  # Tab 1: brief synthesis only
         timing_summary,
-        "",
         format_responses_side_by_side({}, responses, active_models),
         format_reviews_side_by_side({}, reviews, reviewer_models),
-        format_synthesis(synthesis),  # Tab 2: full synthesis with all sections
-        consensus_display,  # Show consensus meter with score
-        consensus_display  # consensus_display_tab1
+        format_synthesis(synthesis),  # Tab 3: full synthesis
+        consensus_display,  # Tab 3: consensus meter
+        composition_html,  # Tab 3: composition meter
+        pending_session  # Session data for manual save
     ))
 
 
@@ -873,6 +1048,7 @@ def run_council_generator(
     selected_models: list[str],
     document_text: str | None = None,
     document_filename: str | None = None,
+    stop_flag: list | None = None,
     progress=gr.Progress()
 ):
     """
@@ -884,6 +1060,7 @@ def run_council_generator(
         selected_models: List of model display names to use
         document_text: Optional extracted text from uploaded file
         document_filename: Optional filename of uploaded document
+        stop_flag: Optional list [bool] that can be set to True to stop deliberation
         progress: Gradio progress indicator (unused currently)
     """
     import queue
@@ -891,11 +1068,16 @@ def run_council_generator(
 
     # Thread-safe queue for updates
     result_queue = queue.Queue()
+    stop_event_holder = [None]  # To pass stop_event to async code
 
     def run_async():
         async def run_with_queue():
             # Create async queue
             async_queue = asyncio.Queue()
+
+            # Create stop event
+            stop_event = asyncio.Event()
+            stop_event_holder[0] = stop_event
 
             # Task to transfer from async queue to sync queue
             async def transfer():
@@ -906,14 +1088,26 @@ def run_council_generator(
                     result_queue.put(("update", item))
                 result_queue.put(("done", None))
 
+            # Task to monitor stop_flag
+            async def monitor_stop():
+                while True:
+                    if stop_flag and stop_flag[0]:
+                        stop_event.set()
+                        break
+                    await asyncio.sleep(0.1)
+
             # Run council and transfer concurrently
             transfer_task = asyncio.create_task(transfer())
+            monitor_task = asyncio.create_task(monitor_stop())
+
             await run_council_streaming(
                 question, selected_models, async_queue,
                 document_text=document_text,
-                document_filename=document_filename
+                document_filename=document_filename,
+                stop_event=stop_event
             )
             await async_queue.put(None)  # Signal completion
+            monitor_task.cancel()
             await transfer_task
 
         asyncio.run(run_with_queue())
@@ -933,15 +1127,6 @@ def run_council_generator(
             break
 
     thread.join()
-
-
-# --- Settings Callbacks ---
-
-def toggle_verbose(value: bool) -> str:
-    """Toggle verbose mode."""
-    global verbose_mode
-    verbose_mode = value
-    return f"Verbose mode: {'ON' if value else 'OFF'}"
 
 
 # --- Build the Interface ---
@@ -966,32 +1151,26 @@ def create_app():
                 with gr.Row():
                     with gr.Column(scale=2):
                         # --- File Upload Section ---
-                        # Optional: users can upload a document for the council to analyze
                         gr.Markdown("#### Upload a Document (Optional)")
 
-                        # File upload component - accepts .txt, .md, .pdf, .docx
                         file_upload = gr.File(
                             label="Upload a file for the council to analyze",
                             file_types=[".txt", ".md", ".pdf", ".docx"],
-                            file_count="single",  # Only one file at a time
+                            file_count="single",
                         )
 
-                        # Display area for file information
-                        # Shows filename, size, preview, and any warnings
                         file_info_display = gr.HTML(
                             value="<em>No file uploaded. The council will answer your question directly.</em>"
                         )
 
-                        # Clear file button - allows user to remove uploaded file
                         clear_file_btn = gr.Button("🗑️ Clear File", size="sm", visible=False)
 
-                        # Info note about limitations
                         gr.Markdown(
                             "*Note: Graphs and images cannot be analyzed. Tables may have formatting issues in PDFs and Word docs.*",
                             elem_classes="file-note"
                         )
 
-                        gr.Markdown("---")  # Visual separator
+                        gr.Markdown("---")
 
                         # --- Question Input Section ---
                         question_input = gr.Textbox(
@@ -1001,7 +1180,19 @@ def create_app():
                             elem_classes="question-input"
                         )
 
-                        # Model selection - vertical checkboxes with clear labels
+                        with gr.Row():
+                            submit_btn = gr.Button("Submit to Council", variant="primary", size="lg")
+                            stop_btn = gr.Button("⏹️ Stop Deliberation", variant="stop", size="lg", visible=False)
+
+                        # Stop confirmation row (hidden by default)
+                        with gr.Row(visible=False) as stop_confirm_row:
+                            gr.Markdown("**Deliberation stopped.** What would you like to do?")
+                        with gr.Row(visible=False) as stop_options_row:
+                            clear_session_btn = gr.Button("🗑️ Clear Session", variant="secondary")
+                            synthesize_now_btn = gr.Button("📝 Synthesize Now", variant="primary")
+
+                    with gr.Column(scale=1):
+                        # --- Model Selection ---
                         gr.Markdown("#### Select Council Members")
                         model_checkboxes = []
                         for model_id in AVAILABLE_MODELS:
@@ -1014,27 +1205,28 @@ def create_app():
                             )
                             model_checkboxes.append(cb)
 
-                        submit_btn = gr.Button("Submit to Council", variant="primary", size="lg")
-
                     with gr.Column(scale=1):
+                        # --- Settings (moved from Tab 3) ---
+                        gr.Markdown("#### Settings")
+
+                        gr.Markdown(f"**Chairman:** {get_display_name(CHAIRMAN_MODEL)}")
+
+                        gr.Markdown("---")
+
+                        gr.Markdown("##### GPU Memory")
+                        clear_gpu_btn = gr.Button("🔄 Clear GPU Memory", variant="secondary", size="sm")
+                        gpu_status = gr.Markdown(value="")
+
+                        gr.Markdown(f"*Max VRAM: {MAX_CONCURRENT_VRAM_GB}GB*")
+
+                # Status section
+                with gr.Row():
+                    with gr.Column():
                         status_display = gr.Markdown(
                             value="Ready to convene the council.",
                             elem_classes="stage-indicator"
                         )
                         timing_display = gr.Markdown(value="")
-
-                gr.Markdown("### Chairman's Final Answer", elem_classes="final-answer-header")
-                final_answer = gr.Markdown(
-                    value="*Submit a question to see the council's synthesized answer.*",
-                    elem_classes="final-answer"
-                )
-
-                # Consensus meter for Tab 1
-                gr.Markdown("### Council Consensus")
-                consensus_display_tab1 = gr.HTML(value="<em>Submit a question to see consensus analysis</em>")
-
-                # Hidden outputs for other tabs (updated together)
-                hidden_spacer = gr.Markdown(value="", visible=False)
 
             # === TAB 2: Council Deliberation ===
             with gr.Tab("Council Deliberation"):
@@ -1045,66 +1237,39 @@ def create_app():
 
                 with gr.Accordion("Stage 2: Peer Reviews", open=True, elem_classes="stage-2"):
                     reviews_display = gr.HTML(value="<em>No reviews yet</em>")
-                    gr.Markdown("#### Consensus Meter")
-                    agreement_display = gr.HTML(value="<em>Submit a question to see consensus analysis</em>")
 
-                with gr.Accordion("Stage 3: Chairman's Analysis", open=True, elem_classes="stage-3"):
-                    synthesis_display = gr.Markdown(value="*Awaiting synthesis...*", elem_classes="stage-3-content")
+            # === TAB 3: Final Synthesis ===
+            with gr.Tab("Final Synthesis"):
+                gr.Markdown("### Chairman's Final Answer", elem_classes="final-answer-header")
+                gr.Markdown(f"*Synthesized by {get_display_name(CHAIRMAN_MODEL)}*")
 
-            # === TAB 3: Settings ===
-            with gr.Tab("Settings"):
-                gr.Markdown("### Council Configuration")
+                synthesis_display = gr.Markdown(
+                    value="*Submit a question to see the council's synthesized answer.*",
+                    elem_classes="final-answer"
+                )
 
-                with gr.Row():
-                    with gr.Column():
-                        gr.Markdown("#### Chairman")
-                        gr.Markdown(f"**{get_display_name(CHAIRMAN_MODEL)}**")
-                        gr.Markdown("*The chairman synthesizes the final answer from all council deliberations.*")
+                gr.Markdown("### Council Consensus")
+                consensus_display = gr.HTML(value="<em>Submit a question to see consensus analysis</em>")
 
-                    with gr.Column():
-                        gr.Markdown("#### Display Options")
-
-                        verbose_toggle = gr.Checkbox(
-                            label="Verbose Mode",
-                            value=False,
-                            info="Show additional detail in responses"
-                        )
-                        verbose_status = gr.Markdown(value="Verbose mode: OFF")
+                gr.Markdown("### Response Composition")
+                composition_display = gr.HTML(value="<em>Submit a question to see how the response was composed</em>")
 
                 gr.Markdown("---")
 
-                with gr.Row():
-                    with gr.Column():
-                        gr.Markdown("#### GPU Memory Management")
-                        gr.Markdown("*Models run in VRAM-aware batches automatically. Use this to clear memory if needed.*")
-                        clear_gpu_btn = gr.Button("🔄 Clear GPU Memory (Restart Ollama)", variant="secondary")
-                        gpu_status = gr.Markdown(value="")
+                # Save Session button and state
+                pending_session_state = gr.State(value=None)
+                save_status = gr.Markdown(value="")
 
-                    with gr.Column():
-                        gr.Markdown("#### VRAM Configuration")
-                        gr.Markdown(f"*Max concurrent VRAM: {MAX_CONCURRENT_VRAM_GB}GB*")
-                        gr.Markdown("*Edit `config.py` to adjust VRAM limits.*")
-
-                gr.Markdown("---")
-                gr.Markdown(
-                    """
-                    #### Model Information
-                    | Model | VRAM | Description |
-                    |-------|------|-------------|
-                    | Llama 3.3 70B | ~40GB | Meta's flagship model |
-                    | Qwen 2.5 32B | ~20GB | Alibaba's multilingual model |
-                    | Gemma 2 27B | ~17GB | Google's efficient model |
-                    | DeepSeek R1 32B | ~20GB | Reasoning specialist |
-                    | Mistral 7B | ~4GB | Fast European model |
-                    | Claude Opus 4.5 | API | Chairman (Anthropic) |
-                    """
+                save_session_btn = gr.Button(
+                    "💾 Save Session to History",
+                    variant="primary",
+                    size="lg"
                 )
 
                 def clear_gpu_memory():
                     """Restart Ollama to clear GPU memory."""
                     import subprocess
                     try:
-                        # Try systemctl first (common on Linux)
                         result = subprocess.run(
                             ["sudo", "systemctl", "restart", "ollama"],
                             capture_output=True,
@@ -1114,7 +1279,6 @@ def create_app():
                         if result.returncode == 0:
                             return "✅ Ollama restarted successfully. GPU memory cleared."
 
-                        # Fallback: try killing and restarting ollama directly
                         subprocess.run(["pkill", "-f", "ollama"], capture_output=True, timeout=10)
                         import time
                         time.sleep(2)
@@ -1130,12 +1294,6 @@ def create_app():
                 clear_gpu_btn.click(
                     fn=clear_gpu_memory,
                     outputs=[gpu_status]
-                )
-
-                verbose_toggle.change(
-                    fn=toggle_verbose,
-                    inputs=[verbose_toggle],
-                    outputs=[verbose_status]
                 )
 
             # === TAB 4: History ===
@@ -1172,12 +1330,13 @@ def create_app():
                 def refresh_sessions():
                     sessions = list_sessions()
                     if not sessions:
-                        return gr.update(choices=[], value=None), "<em>No sessions found</em>"
-                    choices = [
-                        (f"{s['timestamp'][:10]} | {s['consensus_level'].upper()} ({s['consensus_score']:.0f}) | {s['question'][:50]}...", s['id'])
-                        for s in sessions
-                    ]
-                    return gr.update(choices=choices, value=None), f"<em>Found {len(sessions)} sessions</em>"
+                        return gr.update(choices=[], value=None), "<em>No sessions found. Save a session from the Final Synthesis tab.</em>"
+                    choices = []
+                    for s in sessions:
+                        q_preview = s['question'][:50] + ("..." if len(s['question']) > 50 else "")
+                        label = f"{s['timestamp'][:10]} | {s['consensus_level'].upper()} ({s['consensus_score']:.0f}) | {q_preview}"
+                        choices.append((label, s['id']))
+                    return gr.update(choices=choices, value=None), f"<em>Found {len(sessions)} session(s)</em>"
 
                 def load_session_details(session_id):
                     if not session_id:
@@ -1187,6 +1346,15 @@ def create_app():
                         return "Session not found", "", ""
 
                     question_md = f"**Question:** {session['question']}\n\n**Models:** {', '.join(session['models'])}\n\n**Date:** {session['timestamp']}"
+
+                    # Add document info if present
+                    if session.get("document"):
+                        doc = session["document"]
+                        question_md += f"\n\n**Document:** {doc.get('filename', 'Unknown')} ({doc.get('char_count', 0):,} chars)"
+
+                    # Add early termination note if applicable
+                    if session.get("was_stopped_early"):
+                        question_md += "\n\n⚠️ *Deliberation was stopped early by user*"
 
                     consensus = session['consensus']
                     colors = {"high": ("#4CAF50", "#e8f5e9"), "medium": ("#FF9800", "#fff3e0"), "low": ("#f44336", "#ffebee")}
@@ -1199,6 +1367,24 @@ def create_app():
                         {consensus['description']}
                     </div>
                     '''
+
+                    # Add composition info if available
+                    if session.get("composition"):
+                        comp = session["composition"]
+                        council_color = "#2196F3"
+                        chairman_color = "#9C27B0"
+                        web_color = "#FF9800"
+
+                        consensus_html += f'''
+                        <div style="background: #f5f5f5; border: 2px solid #9C27B0; border-radius: 8px; padding: 12px; margin: 8px 0;">
+                            <strong>Response Composition</strong><br/>
+                            <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 0.9em;">
+                                <span style="color: {council_color};">● Council: {comp.get('council_contribution', 0):.0f}%</span>
+                                <span style="color: {chairman_color};">● Chairman: {comp.get('chairman_independent', 0):.0f}%</span>
+                                <span style="color: {web_color};">● Web: {comp.get('web_search_used', 0):.0f}%</span>
+                            </div>
+                        </div>
+                        '''
 
                     synthesis_md = f"### Chairman's Synthesis\n\n{session['synthesis']}"
 
@@ -1239,6 +1425,13 @@ def create_app():
         # State to store the extracted document text
         # gr.State persists data between interactions
         document_state = gr.State(value=None)
+
+        # State to track deliberation stop request
+        # Using a list so it can be modified by reference
+        stop_flag_state = gr.State(value=[False])
+
+        # State to track if deliberation is in progress
+        deliberation_in_progress = gr.State(value=False)
 
         def handle_file_upload(file):
             """
@@ -1356,15 +1549,19 @@ def create_app():
 
         # === Main Submit Action ===
         # Wrapper to collect checkbox values, file content, and call generator
-        def collect_and_run(question, document, *checkbox_values):
+        def collect_and_run(question, document, stop_flag, *checkbox_values):
             """
             Collects all inputs and runs the council session.
 
             Args:
                 question: The user's question
                 document: Dict with document info (or None if no file)
+                stop_flag: List [bool] to signal stop request
                 *checkbox_values: Which models are selected
             """
+            # Reset stop flag at start
+            stop_flag[0] = False
+
             # Check if we need to exclude Gemma 2 due to document length
             exclude_gemma = document.get("exclude_gemma", False) if document else False
 
@@ -1383,22 +1580,134 @@ def create_app():
             document_filename = document.get("filename") if document else None
 
             # Return generator results
-            yield from run_council_generator(question, selected, document_text, document_filename)
+            yield from run_council_generator(question, selected, document_text, document_filename, stop_flag)
 
+        def on_submit_start():
+            """Called when submit starts - show stop button, reset stop flag."""
+            return (
+                gr.update(visible=True),  # Show stop button
+                gr.update(visible=False),  # Hide confirm row
+                gr.update(visible=False),  # Hide options row
+                [False],  # Reset stop flag
+                True,  # Set deliberation in progress
+            )
+
+        def on_submit_end():
+            """Called when submit ends - hide stop button."""
+            return (
+                gr.update(visible=False),  # Hide stop button
+                False,  # Clear deliberation in progress
+            )
+
+        def on_stop_click(stop_flag):
+            """Called when stop button is clicked."""
+            stop_flag[0] = True
+            return (
+                gr.update(visible=False),  # Hide stop button
+                gr.update(visible=True),  # Show confirm row
+                gr.update(visible=True),  # Show options row
+                stop_flag,  # Return updated flag
+            )
+
+        def on_clear_session():
+            """Called when user wants to clear the session after stopping."""
+            return (
+                gr.update(visible=False),  # Hide confirm row
+                gr.update(visible=False),  # Hide options row
+                "Ready to convene the council.",  # Reset status
+                "",  # Clear timing
+                "<em>No responses yet</em>",  # Clear responses
+                "<em>No reviews yet</em>",  # Clear reviews
+                "*Submit a question to see the council's synthesized answer.*",  # Clear synthesis
+                "<em>Submit a question to see consensus analysis</em>",  # Clear consensus
+                "<em>Submit a question to see how the response was composed</em>",  # Clear composition
+                None,  # Clear pending session
+                [False],  # Reset stop flag
+            )
+
+        def on_synthesize_now():
+            """Called when user wants to synthesize with current data after stopping."""
+            return (
+                gr.update(visible=False),  # Hide confirm row
+                gr.update(visible=False),  # Hide options row
+            )
+
+        # Wire up submit button with pre/post handlers
         submit_btn.click(
+            fn=on_submit_start,
+            outputs=[stop_btn, stop_confirm_row, stop_options_row, stop_flag_state, deliberation_in_progress]
+        ).then(
             fn=collect_and_run,
-            inputs=[question_input, document_state] + model_checkboxes,
+            inputs=[question_input, document_state, stop_flag_state] + model_checkboxes,
             outputs=[
-                status_display,
-                final_answer,
-                timing_display,
-                hidden_spacer,
-                responses_display,
-                reviews_display,
-                synthesis_display,
-                agreement_display,
-                consensus_display_tab1,
+                status_display,      # Tab 1: status
+                timing_display,      # Tab 1: timing
+                responses_display,   # Tab 2: responses
+                reviews_display,     # Tab 2: reviews
+                synthesis_display,   # Tab 3: chairman's synthesis
+                consensus_display,   # Tab 3: consensus meter
+                composition_display, # Tab 3: composition meter
+                pending_session_state,  # Tab 3: session data for save
             ],
+        ).then(
+            fn=on_submit_end,
+            outputs=[stop_btn, deliberation_in_progress]
+        )
+
+        # Wire up stop button
+        stop_btn.click(
+            fn=on_stop_click,
+            inputs=[stop_flag_state],
+            outputs=[stop_btn, stop_confirm_row, stop_options_row, stop_flag_state]
+        )
+
+        # Wire up clear session button
+        clear_session_btn.click(
+            fn=on_clear_session,
+            outputs=[
+                stop_confirm_row, stop_options_row,
+                status_display, timing_display,
+                responses_display, reviews_display,
+                synthesis_display, consensus_display, composition_display,
+                pending_session_state, stop_flag_state
+            ]
+        )
+
+        # Wire up synthesize now button (just hides the options)
+        synthesize_now_btn.click(
+            fn=on_synthesize_now,
+            outputs=[stop_confirm_row, stop_options_row]
+        )
+
+        # === Save Session Handler ===
+        def handle_save_session(pending_session):
+            """Save the pending session to history."""
+            if pending_session is None:
+                return "⚠️ No session to save. Submit a question first."
+
+            try:
+                # Extract data from pending session
+                session_data = save_session(
+                    question=pending_session["question"],
+                    responses=pending_session["responses"],
+                    reviews=pending_session["reviews"],
+                    synthesis=pending_session["synthesis"],
+                    consensus=pending_session["consensus"],
+                    models=pending_session["models"],
+                    document_filename=pending_session.get("document_filename"),
+                    document_char_count=pending_session.get("document_char_count"),
+                    document_preview=pending_session.get("document_preview"),
+                    composition=pending_session.get("composition"),
+                    was_stopped_early=pending_session.get("was_stopped_early", False)
+                )
+                return f"✅ Session saved! ID: {session_data['id']}"
+            except Exception as e:
+                return f"❌ Failed to save session: {e}"
+
+        save_session_btn.click(
+            fn=handle_save_session,
+            inputs=[pending_session_state],
+            outputs=[save_status]
         )
 
     return app
@@ -1488,6 +1797,16 @@ if __name__ == "__main__":
         .question-input label {
             color: #6A1B9A !important;
             font-weight: bold !important;
+        }
+
+        /* Stop button styling */
+        button[variant="stop"] {
+            background: #f44336 !important;
+            border-color: #d32f2f !important;
+            color: white !important;
+        }
+        button[variant="stop"]:hover {
+            background: #d32f2f !important;
         }
         """,
     )
