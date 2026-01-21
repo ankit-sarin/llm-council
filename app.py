@@ -1938,6 +1938,22 @@ def create_app():
 # --- Entry Point ---
 
 if __name__ == "__main__":
+    import signal
+    import sys
+
+    # --- Graceful Shutdown Handler ---
+    def graceful_shutdown(signum, frame):
+        """Handle SIGTERM/SIGINT for graceful shutdown."""
+        sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
+        print(f"\n{sig_name} received. Shutting down gracefully...")
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, graceful_shutdown)
+    signal.signal(signal.SIGINT, graceful_shutdown)
+
+    # --- Port Configuration ---
+    server_port = int(os.environ.get("PORT", "7861"))
+
     # Check for required authentication credentials
     auth_user = os.environ.get("LLM_COUNCIL_USER")
     auth_password = os.environ.get("LLM_COUNCIL_PASSWORD")
@@ -1955,15 +1971,15 @@ if __name__ == "__main__":
         print()
         print("Or add them to your .env file.")
         print("=" * 60)
-        import sys
         sys.exit(1)
 
     print(f"Authentication enabled for user: {auth_user}")
+    print(f"Starting on port: {server_port}")
 
     app = create_app()
     app.launch(
         server_name="0.0.0.0",
-        server_port=7861,
+        server_port=server_port,
         share=False,
         show_error=True,
         # Authentication - users must log in before accessing the interface
