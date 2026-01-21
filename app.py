@@ -5,7 +5,10 @@ Multi-model debate system with peer review and chairman synthesis.
 """
 
 import asyncio
+import logging
 import gradio as gr
+
+logger = logging.getLogger(__name__)
 
 from config import (
     AVAILABLE_MODELS,
@@ -1144,6 +1147,10 @@ def run_council_generator(
     result_queue = queue.Queue()
     stop_event_holder = [None]  # To pass stop_event to async code
 
+    # Conservative timeouts to prevent UI from waiting indefinitely
+    QUEUE_ITEM_TIMEOUT = 120  # 2 minutes max wait for any single queue item
+    TOTAL_TIMEOUT = 900  # 15 minutes max for entire operation
+
     def run_async():
         async def run_with_queue():
             # Create async queue
@@ -1155,52 +1162,74 @@ def run_council_generator(
 
             # Task to transfer from async queue to sync queue
             async def transfer():
-                while True:
-                    item = await async_queue.get()
-                    if item is None:
-                        break
-                    result_queue.put(("update", item))
-                result_queue.put(("done", None))
+                try:
+                    while True:
+                        try:
+                            # Timeout prevents hanging if council crashes before signaling done
+                            item = await asyncio.wait_for(async_queue.get(), timeout=QUEUE_ITEM_TIMEOUT)
+                            if item is None:
+                                break
+                            result_queue.put(("update", item))
+                        except asyncio.TimeoutError:
+                            logger.warning("Transfer task timed out waiting for queue item")
+                            break
+                finally:
+                    # Always signal done so the UI consumer can exit
+                    result_queue.put(("done", None))
 
             # Task to monitor stop_flag
             async def monitor_stop():
-                while True:
-                    if stop_flag and stop_flag[0]:
-                        stop_event.set()
-                        break
-                    await asyncio.sleep(0.1)
+                try:
+                    while True:
+                        if stop_flag and stop_flag[0]:
+                            stop_event.set()
+                            break
+                        await asyncio.sleep(0.1)
+                except asyncio.CancelledError:
+                    pass  # Expected when cancelled
 
             # Run council and transfer concurrently
             transfer_task = asyncio.create_task(transfer())
             monitor_task = asyncio.create_task(monitor_stop())
 
-            await run_council_streaming(
-                question, selected_models, async_queue,
-                document_text=document_text,
-                document_filename=document_filename,
-                stop_event=stop_event
-            )
-            await async_queue.put(None)  # Signal completion
-            monitor_task.cancel()
-            await transfer_task
+            try:
+                await run_council_streaming(
+                    question, selected_models, async_queue,
+                    document_text=document_text,
+                    document_filename=document_filename,
+                    stop_event=stop_event
+                )
+            finally:
+                # Always signal completion even if council crashes
+                await async_queue.put(None)
+                monitor_task.cancel()
+                try:
+                    await transfer_task
+                except Exception as e:
+                    logger.error(f"Transfer task error: {e}")
 
         asyncio.run(run_with_queue())
 
     # Start async runner in thread
-    thread = threading.Thread(target=run_async)
+    thread = threading.Thread(target=run_async, daemon=True)
     thread.start()
 
     # Yield updates as they come
-    while True:
-        try:
-            msg_type, data = result_queue.get(timeout=600)  # 10 min timeout
-            if msg_type == "done":
+    try:
+        while True:
+            try:
+                msg_type, data = result_queue.get(timeout=TOTAL_TIMEOUT)
+                if msg_type == "done":
+                    break
+                yield data
+            except queue.Empty:
+                logger.warning("Result queue timed out - ending generator")
                 break
-            yield data
-        except queue.Empty:
-            break
-
-    thread.join()
+    finally:
+        # Always join thread with timeout to prevent hanging
+        thread.join(timeout=5.0)
+        if thread.is_alive():
+            logger.warning("Async runner thread did not terminate in time")
 
 
 # --- Build the Interface ---

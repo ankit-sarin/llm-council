@@ -102,6 +102,11 @@ async def _call_ollama(model: str, prompt: str) -> ModelResponse:
         return ModelResponse(model=model, content=f"[Error: {e}]", elapsed_seconds=elapsed)
 
 
+# Conservative timeouts to prevent UI from waiting indefinitely
+STREAM_TOTAL_TIMEOUT_SECONDS = 600  # 10 minutes max for any single model response
+STREAM_STALL_TIMEOUT_SECONDS = 120  # 2 minutes without receiving a token = stalled
+
+
 async def _call_ollama_streaming(
     model: str,
     prompt: str,
@@ -124,6 +129,7 @@ async def _call_ollama_streaming(
     start = time.perf_counter()
     content = ""
     was_stopped = False
+    timed_out = False
     thread = None
     token_queue = queue.Queue()
 
@@ -150,7 +156,24 @@ async def _call_ollama_streaming(
         thread = threading.Thread(target=run_stream, daemon=True)
         thread.start()
 
+        last_token_time = time.perf_counter()
+
         while True:
+            elapsed = time.perf_counter() - start
+            time_since_last_token = time.perf_counter() - last_token_time
+
+            # Check total timeout
+            if elapsed > STREAM_TOTAL_TIMEOUT_SECONDS:
+                logger.warning(f"[{get_display_name(model)}] Total timeout ({STREAM_TOTAL_TIMEOUT_SECONDS}s) exceeded")
+                timed_out = True
+                break
+
+            # Check stall timeout (no tokens received for too long)
+            if time_since_last_token > STREAM_STALL_TIMEOUT_SECONDS:
+                logger.warning(f"[{get_display_name(model)}] Stall timeout ({STREAM_STALL_TIMEOUT_SECONDS}s) - no tokens received")
+                timed_out = True
+                break
+
             # Check if stop was requested
             if stop_event is not None and stop_event.is_set():
                 logger.info(f"[{get_display_name(model)}] Stop requested, halting stream")
@@ -166,6 +189,7 @@ async def _call_ollama_streaming(
                     content = f"[Error: {data}]"
                     # Continue to drain queue until "done"
                 elif msg_type == "token":
+                    last_token_time = time.perf_counter()  # Reset stall timer
                     content += data
                     await on_token(model, content)
             except queue.Empty:
@@ -177,7 +201,11 @@ async def _call_ollama_streaming(
 
         elapsed = time.perf_counter() - start
 
-        if was_stopped:
+        if timed_out:
+            timeout_msg = "\n\n[Response timed out]"
+            content = content + timeout_msg if content else "[Response timed out]"
+            logger.warning(f"[{get_display_name(model)}] Timed out after {elapsed:.1f}s ({len(content)} chars)")
+        elif was_stopped:
             content = content + "\n\n[Stopped by user]" if content else "[Stopped by user]"
             logger.info(f"[{get_display_name(model)}] Stopped after {elapsed:.1f}s ({len(content)} chars)")
         else:
