@@ -411,7 +411,7 @@ Response B: Accuracy=X, Insight=X, Completeness=X
 [continue for all responses]
 
 ANALYSIS:
-[Brief explanation of your rankings and what stood out about each response]"""
+[2-3 sentences maximum. Focus only on key differentiators between responses.]"""
 
         async def on_token(model, content):
             with lock:
@@ -543,7 +543,7 @@ Response B: Accuracy=X, Insight=X, Completeness=X
 [continue for all responses]
 
 ANALYSIS:
-[Brief explanation of your rankings and what stood out about each response]"""
+[2-3 sentences maximum. Focus only on key differentiators between responses.]"""
 
     response = await _call_ollama(reviewer, prompt)
 
