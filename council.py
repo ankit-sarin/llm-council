@@ -117,31 +117,36 @@ async def _call_ollama_streaming(
         on_token: Callback function for each token
         stop_event: Optional asyncio.Event to signal stopping early
     """
+    import queue
+    import threading
+
     logger.info(f"[{get_display_name(model)}] Starting streaming generation...")
     start = time.perf_counter()
     content = ""
     was_stopped = False
+    thread = None
+    token_queue = queue.Queue()
+
+    def run_stream():
+        """Stream tokens from Ollama. Always signals 'done' via finally."""
+        error_msg = None
+        try:
+            for chunk in ollama.chat(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True
+            ):
+                token = chunk["message"]["content"]
+                token_queue.put(("token", token))
+        except Exception as e:
+            error_msg = str(e)
+            token_queue.put(("error", error_msg))
+        finally:
+            # Always signal completion so the consumer loop can exit
+            token_queue.put(("done", None))
 
     try:
-        import queue
-        import threading
-
-        token_queue = queue.Queue()
-
-        def run_stream():
-            try:
-                for chunk in ollama.chat(
-                    model=model,
-                    messages=[{"role": "user", "content": prompt}],
-                    stream=True
-                ):
-                    token = chunk["message"]["content"]
-                    token_queue.put(("token", token))
-                token_queue.put(("done", None))
-            except Exception as e:
-                token_queue.put(("error", str(e)))
-
-        thread = threading.Thread(target=run_stream)
+        thread = threading.Thread(target=run_stream, daemon=True)
         thread.start()
 
         while True:
@@ -158,7 +163,7 @@ async def _call_ollama_streaming(
                     break
                 elif msg_type == "error":
                     content = f"[Error: {data}]"
-                    break
+                    # Continue to drain queue until "done"
                 elif msg_type == "token":
                     content += data
                     await on_token(model, content)
@@ -169,7 +174,6 @@ async def _call_ollama_streaming(
                 if not thread.is_alive() and token_queue.empty():
                     break
 
-        thread.join(timeout=1.0)  # Don't wait forever if stopped
         elapsed = time.perf_counter() - start
 
         if was_stopped:
@@ -184,6 +188,13 @@ async def _call_ollama_streaming(
         elapsed = time.perf_counter() - start
         logger.error(f"[{get_display_name(model)}] Failed after {elapsed:.1f}s: {e}")
         return ModelResponse(model=model, content=f"[Error: {e}]", elapsed_seconds=elapsed)
+
+    finally:
+        # Always join the thread before returning
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=2.0)
+            if thread.is_alive():
+                logger.warning(f"[{get_display_name(model)}] Thread did not terminate in time")
 
 
 async def get_initial_responses(question: str, models: list[str] | None = None) -> dict[str, ModelResponse]:
