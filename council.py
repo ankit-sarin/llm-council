@@ -520,6 +520,10 @@ ANALYSIS:
                 "model": mapping[letter],
             })
 
+        # Parse and enrich rankings with numeric scores
+        rankings, parsed_count = enrich_rankings_with_scores(rankings, response.content)
+        logger.debug(f"[{get_display_name(reviewer)}] Parsed scores for {parsed_count}/{len(rankings)} responses")
+
         review = PeerReview(
             reviewer=reviewer,
             rankings=rankings,
@@ -641,13 +645,17 @@ ANALYSIS:
 
     response = await _call_ollama(reviewer, prompt)
 
-    # Parse rankings from response (basic parsing - could be more robust)
+    # Build initial rankings
     rankings = []
     for letter in response_mapping.keys():
         rankings.append({
             "response": letter,
             "model": response_mapping[letter],  # Store actual model for later
         })
+
+    # Parse and enrich rankings with numeric scores
+    rankings, parsed_count = enrich_rankings_with_scores(rankings, response.content)
+    logger.debug(f"[{get_display_name(reviewer)}] Parsed scores for {parsed_count}/{len(rankings)} responses")
 
     return PeerReview(
         reviewer=reviewer,
@@ -719,6 +727,35 @@ def _parse_review_scores(analysis: str) -> dict[str, dict[str, int]]:
     return scores
 
 
+def enrich_rankings_with_scores(rankings: list[dict], analysis: str) -> tuple[list[dict], int]:
+    """
+    Parse scores from review text and add them to rankings.
+
+    Args:
+        rankings: List of ranking dicts with "response" and "model" keys
+        analysis: The review analysis text containing scores
+
+    Returns:
+        Tuple of (enriched rankings, count of successfully parsed responses)
+    """
+    parsed_scores = _parse_review_scores(analysis)
+    parsed_count = 0
+
+    for ranking in rankings:
+        letter = ranking.get("response", "").upper()
+        if letter in parsed_scores:
+            # Add parsed scores to the ranking entry
+            ranking["accuracy"] = parsed_scores[letter]["accuracy"]
+            ranking["insight"] = parsed_scores[letter]["insight"]
+            ranking["completeness"] = parsed_scores[letter]["completeness"]
+            ranking["parsed"] = True
+            parsed_count += 1
+        else:
+            ranking["parsed"] = False
+
+    return rankings, parsed_count
+
+
 def calculate_consensus(reviews: dict[str, PeerReview], responses: dict[str, ModelResponse]) -> ConsensusScore:
     """
     Calculate consensus score from peer reviews.
@@ -726,8 +763,11 @@ def calculate_consensus(reviews: dict[str, PeerReview], responses: dict[str, Mod
     Measures how much reviewers agree on the quality of responses.
     High variance in scores = low consensus (disagreement).
     Low variance = high consensus (agreement).
+
+    Uses pre-parsed scores from PeerReview.rankings and tracks coverage statistics.
     """
-    if len(reviews) < 2:
+    total_reviewers = len(reviews)
+    if total_reviewers < 2:
         return ConsensusScore(
             score=50.0,
             level="unknown",
@@ -735,24 +775,51 @@ def calculate_consensus(reviews: dict[str, PeerReview], responses: dict[str, Mod
             disagreement_areas=[]
         )
 
-    # Parse all review scores
+    # Extract scores from enriched rankings (already parsed when PeerReview was created)
     all_scores = {}  # {reviewer: {response_letter: {criterion: score}}}
     response_to_model = {}  # Map response letters back to models
+    total_response_letters = set()
+    parsed_response_letters = set()
+    reviewers_with_scores = 0
 
     for reviewer, review in reviews.items():
-        parsed = _parse_review_scores(review.analysis)
-        if parsed:
-            all_scores[reviewer] = parsed
-            # Build response-to-model mapping from rankings
-            for ranking in review.rankings:
-                if "response" in ranking and "model" in ranking:
-                    response_to_model[ranking["response"]] = ranking["model"]
+        reviewer_scores = {}
+        reviewer_had_scores = False
+
+        for ranking in review.rankings:
+            letter = ranking.get("response", "")
+            total_response_letters.add(letter)
+
+            # Build response-to-model mapping
+            if "model" in ranking:
+                response_to_model[letter] = ranking["model"]
+
+            # Check if this ranking has parsed scores
+            if ranking.get("parsed", False):
+                parsed_response_letters.add(letter)
+                reviewer_scores[letter] = {
+                    "accuracy": ranking.get("accuracy", 0),
+                    "insight": ranking.get("insight", 0),
+                    "completeness": ranking.get("completeness", 0),
+                }
+                reviewer_had_scores = True
+
+        if reviewer_scores:
+            all_scores[reviewer] = reviewer_scores
+        if reviewer_had_scores:
+            reviewers_with_scores += 1
+
+    # Coverage statistics
+    coverage_reviewers = reviewers_with_scores
+    coverage_responses = len(parsed_response_letters)
+    total_responses = len(total_response_letters)
+    coverage_pct = (coverage_responses / total_responses * 100) if total_responses > 0 else 0
 
     if len(all_scores) < 2:
         return ConsensusScore(
             score=50.0,
             level="unknown",
-            description="Could not parse enough review scores",
+            description=f"Could not parse enough review scores (parsed {coverage_reviewers}/{total_reviewers} reviewers, {coverage_responses}/{total_responses} responses)",
             disagreement_areas=[]
         )
 
@@ -790,7 +857,7 @@ def calculate_consensus(reviews: dict[str, PeerReview], responses: dict[str, Mod
         return ConsensusScore(
             score=50.0,
             level="unknown",
-            description="Insufficient data to calculate consensus",
+            description=f"Insufficient data to calculate consensus (parsed {coverage_reviewers}/{total_reviewers} reviewers, {coverage_responses}/{total_responses} responses)",
             disagreement_areas=[]
         )
 
@@ -812,6 +879,10 @@ def calculate_consensus(reviews: dict[str, PeerReview], responses: dict[str, Mod
     else:
         level = "low"
         description = "Significant disagreement - topic may be complex or subjective"
+
+    # Add coverage statistics
+    if coverage_pct < 100:
+        description += f" (coverage: {coverage_reviewers}/{total_reviewers} reviewers, {coverage_responses}/{total_responses} responses)"
 
     # Add summary of disagreements
     if disagreement_details:
