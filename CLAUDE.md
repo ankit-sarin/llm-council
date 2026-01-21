@@ -51,7 +51,7 @@ llm-council/
 ## Files
 
 ### config.py
-Model configuration with VRAM requirements and batching:
+Model configuration with VRAM requirements, context limits, and batching:
 ```python
 AVAILABLE_MODELS = [
     "llama3.3:70b",     # ~40GB - Meta's flagship
@@ -70,26 +70,72 @@ MODEL_VRAM_GB = {
     "mistral:7b": 4.0,
 }
 
-MAX_CONCURRENT_VRAM_GB = 60.0  # Only batch if total exceeds this
+# Context window limits per model (tokens)
+MODEL_CONTEXT_TOKENS = {
+    "llama3.3:70b": 128000,
+    "qwen2.5:32b": 32000,
+    "gemma2:27b": 8000,    # Limited context
+    "deepseek-r1:32b": 64000,
+    "mistral:7b": 32000,
+}
+
+MAX_CONCURRENT_VRAM_GB = 60.0   # Only batch if total exceeds this
+VRAM_SAFETY_FACTOR = 1.20       # 20% buffer for conservative estimates
+CHARS_PER_TOKEN = 3.0           # Conservative char-to-token estimate
+CONTEXT_SAFETY_MARGIN = 0.7     # Reserve 30% for prompt + response
 
 DEFAULT_ENABLED_MODELS = ["qwen2.5:32b", "gemma2:27b", "mistral:7b"]
 CHAIRMAN_MODEL = "claude-opus-4-5-20251101"
+
+# Model selection presets
+MODEL_PRESETS = {
+    "fast": {"name": "⚡ Fast", "models": ["gemma2:27b", "mistral:7b"]},
+    "balanced": {"name": "⚖️ Balanced", "models": ["qwen2.5:32b", "gemma2:27b", "mistral:7b"]},
+    "deep": {"name": "🔬 Deep", "models": ["llama3.3:70b", "qwen2.5:32b", "deepseek-r1:32b"]},
+}
+
+# Domain-specific example prompts for first-run usability
+EXAMPLE_PROMPTS = [
+    {"label": "🧬 ctDNA Surveillance", "prompt": "What is the current evidence for using ctDNA..."},
+    {"label": "🤖 Robotic Platforms", "prompt": "Compare the da Vinci Xi, Hugo RAS, and..."},
+    {"label": "📄 Paper Critique", "prompt": "What are the key methodological considerations..."},
+    {"label": "💊 Drug Interaction", "prompt": "A patient on warfarin needs to start amiodarone..."},
+    {"label": "🔬 Research Design", "prompt": "What are the advantages and limitations of..."},
+]
 ```
 
 ### council.py
-Async engine with parallel-first execution and streaming:
-- `stream_initial_responses_live(question, models, callbacks, document_text)` - Parallel responses (batches only if VRAM overflows)
-- `stream_peer_reviews_live(question, responses, callbacks)` - Parallel reviews (batches only if VRAM overflows)
+Async engine with parallel-first execution, streaming, and timeouts:
+```python
+# Timeout constants
+STREAM_TOTAL_TIMEOUT_SECONDS = 600   # 10 min max per model
+STREAM_STALL_TIMEOUT_SECONDS = 120   # 2 min without tokens = stalled
+COOLDOWN_BASE_SECONDS = 1.0          # Minimum inter-batch delay
+COOLDOWN_PER_10GB_SECONDS = 0.5      # Additional delay per 10GB VRAM
+```
+
+Key functions:
+- `stream_initial_responses_live(question, models, callbacks, document_text, stop_event)` - Parallel responses with stop support
+- `stream_peer_reviews_live(question, responses, callbacks, stop_event)` - Parallel reviews with stop support
+- `_call_ollama_streaming(model, prompt, on_token, stop_event)` - Streams tokens with timeout and cancellation
 - `get_chairman_synthesis(question, responses, reviews, consensus, document_filename)` - Claude synthesis
-- `calculate_consensus(reviews, responses)` - Agreement score from peer review variance
-- `create_vram_batches(models)` - Groups models to fit within VRAM limits (used only when needed)
+- `calculate_consensus(reviews, responses)` - Uses pre-parsed scores from PeerReview.rankings
+- `enrich_rankings_with_scores(rankings, analysis)` - Parses accuracy/insight/completeness into rankings
+- `calculate_batch_cooldown(batch)` - VRAM-aware delay between batches
+- `create_vram_batches(models)` - Groups models to fit within VRAM limits
 
 ### app.py
 Gradio interface with 4 tabs:
-- **Tab 1: Ask the Council** - File upload, model checkboxes, question input, final answer, consensus meter
+- **Tab 1: Ask the Council** - File upload, model presets, model checkboxes, example prompts, question input, final answer, consensus meter
 - **Tab 2: Council Deliberation** - Live view of responses/reviews, consensus meter
 - **Tab 3: Settings** - Chairman info, GPU memory management, VRAM config
 - **Tab 4: History** - Browse past sessions, export to Markdown
+
+Key constants:
+```python
+QUEUE_ITEM_TIMEOUT = 120    # 2 min wait for each queue item
+TOTAL_TIMEOUT = 900         # 15 min max total streaming time
+```
 
 ## Data Classes
 
@@ -179,6 +225,40 @@ When stopped early, the chairman uses `get_chairman_early_synthesis()` which:
 - Adds more independent analysis to compensate for limited council input
 - Can perform web searches to supplement incomplete data
 
+### Model Selection Presets
+Quick configuration buttons for common use cases:
+- **⚡ Fast**: gemma2:27b + mistral:7b — Quick answers with smaller models
+- **⚖️ Balanced**: qwen2.5:32b + gemma2:27b + mistral:7b — Good tradeoff of speed and depth
+- **🔬 Deep**: llama3.3:70b + qwen2.5:32b + deepseek-r1:32b — Thorough analysis with heavy hitters
+
+Selecting a preset automatically sets the model checkboxes.
+
+### Example Prompts
+Domain-specific example prompts improve first-run usability:
+- 🧬 ctDNA Surveillance — Watch-and-wait strategies in colorectal cancer
+- 🤖 Robotic Platforms — Comparison of da Vinci, Hugo, Medtronic systems
+- 📄 Paper Critique — Framework for evaluating RCT methodology
+- 💊 Drug Interaction — Warfarin-amiodarone management
+- 🔬 Research Design — Propensity score matching vs inverse probability weighting
+
+Selecting an example loads the full prompt into the question input.
+
+### VRAM Management
+VRAM estimates include a 20% safety factor (`VRAM_SAFETY_FACTOR = 1.20`) to avoid OOM:
+```python
+def get_model_vram(model, with_safety_factor=True):
+    base_vram = MODEL_VRAM_GB.get(model, 10.0)
+    return base_vram * VRAM_SAFETY_FACTOR if with_safety_factor else base_vram
+```
+
+Inter-batch cooldowns scale with batch VRAM usage:
+```python
+def calculate_batch_cooldown(batch):
+    batch_vram = sum(get_model_vram(m) for m in batch)
+    return COOLDOWN_BASE_SECONDS + (batch_vram / 10.0) * COOLDOWN_PER_10GB_SECONDS
+    # 48GB batch → 1.0 + 2.4 = 3.4 seconds cooldown
+```
+
 ### Parallel-First Execution
 Models run in parallel by default for maximum speed. Batching only activates when total VRAM would exceed the limit:
 ```python
@@ -200,9 +280,12 @@ else:
 | Add llama3.3:70b | 81GB | BATCHED | Split into batches |
 
 ### Consensus Tracking
-Measures agreement between reviewers:
-- Parses scores from review text (Accuracy, Insight, Completeness)
-- Calculates variance across reviewers for each response
+Measures agreement between reviewers with coverage statistics:
+- Scores are parsed into `PeerReview.rankings` via `enrich_rankings_with_scores()`
+- Each ranking entry gains `accuracy`, `insight`, `completeness` numeric fields
+- `calculate_consensus()` uses pre-parsed scores from rankings
+- Coverage stats track how many reviewers and responses were successfully parsed
+- `ConsensusScore.description` includes coverage info (e.g., "3/3 reviewers, 2/3 responses parsed")
 - High variance = low consensus, Low variance = high consensus
 - Visual meter shows score 0-100 with color coding (green/orange/red)
 
@@ -213,7 +296,15 @@ Analyze documents with the council:
 - **Word extraction:** python-docx (paragraphs + tables)
 - **Limits:** 10MB file size, 150K character extraction
 - **Warnings:** Long documents (>100K chars), truncation notice
-- **Gemma 2 exclusion:** Automatically excluded for documents >30K chars (8K context limit)
+- **Context limits:** Models with insufficient context are automatically excluded (uses MODEL_CONTEXT_TOKENS)
+
+Context limit helpers in config.py:
+```python
+get_model_context_limit(model) -> int         # Tokens for model
+get_model_max_chars(model) -> int             # Max chars with safety margin
+check_model_context_fit(model, chars) -> dict # Check if document fits
+filter_models_by_context(models, chars) -> (compatible, excluded)
+```
 
 ### Session History
 All sessions saved to `sessions/` as JSON:
@@ -234,9 +325,10 @@ All sessions saved to `sessions/` as JSON:
 ## Council Flow
 
 ### Stage 1: Initial Responses (Parallel Streaming)
-- All models run in parallel if total VRAM fits within limit (60GB)
+- All models run in parallel if total VRAM (with 20% safety factor) fits within limit (60GB)
 - Falls back to VRAM-aware batching only when necessary
-- 2-second delay between batches (if batched) for GPU memory clearing
+- VRAM-aware cooldowns between batches (larger batches wait longer)
+- Timeouts: 10 min total, 2 min stall detection per model
 - UI updates as each model finishes with ✅ indicator
 
 ### Stage 2: Peer Reviews (Parallel Streaming)
@@ -267,8 +359,8 @@ All sessions saved to `sessions/` as JSON:
 
 ### Parallel-First Execution
 ```python
-async def stream_initial_responses_live(question, models, callbacks, document_text=None):
-    total_vram = sum(get_model_vram(m) for m in models)
+async def stream_initial_responses_live(question, models, callbacks, document_text=None, stop_event=None):
+    total_vram = sum(get_model_vram(m) for m in models)  # Includes 20% safety factor
 
     if total_vram <= MAX_CONCURRENT_VRAM_GB:
         batches = [models]  # All parallel
@@ -276,10 +368,13 @@ async def stream_initial_responses_live(question, models, callbacks, document_te
         batches = create_vram_batches(models)  # [[70B], [32B, 7B], [27B]]
 
     for batch in batches:
+        if stop_event and stop_event.is_set():
+            break
         tasks = [asyncio.create_task(run_model(m)) for m in batch]
         await asyncio.gather(*tasks)
         if len(batches) > 1:
-            await asyncio.sleep(2)  # Let GPU memory clear between batches
+            cooldown = calculate_batch_cooldown(batch)  # VRAM-aware delay
+            await asyncio.sleep(cooldown)
 ```
 
 ### Document-Aware Prompts
@@ -293,14 +388,19 @@ else:
     QUESTION: {question}"""
 ```
 
-### Consensus Calculation
+### Score Enrichment and Consensus
 ```python
+def enrich_rankings_with_scores(rankings, analysis):
+    # Parse "Response A: Accuracy=8, Insight=7, Completeness=9" from analysis
+    # Add numeric fields to each ranking: {"response_letter": "A", "accuracy": 8, ...}
+    # Returns (enriched_rankings, responses_parsed_count)
+
 def calculate_consensus(reviews, responses):
-    # Parse "Response A: Accuracy=8, Insight=7, Completeness=9"
-    # Calculate variance across reviewers
-    # Low variance (< 4) = high consensus
-    # High variance (> 8) = low consensus
-    return ConsensusScore(score=75, level="high", ...)
+    # Uses pre-parsed scores from PeerReview.rankings
+    # Calculates variance across reviewers for each response
+    # Tracks coverage: how many reviewers and responses were parsed
+    # Low variance (< 4) = high consensus, High variance (> 8) = low consensus
+    return ConsensusScore(score=75, level="high", description="3/3 reviewers, 2/3 responses parsed")
 ```
 
 ### Session Storage
@@ -309,7 +409,30 @@ def save_session(question, responses, reviews, synthesis, consensus, models,
                  document_filename=None, document_char_count=None):
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     filepath = SESSIONS_DIR / f"session_{session_id}.json"
+    # PII redaction applied before saving
     json.dump(session_data, filepath)
+```
+
+### Streaming Robustness
+Ollama streaming includes multiple safeguards:
+```python
+async def _call_ollama_streaming(model, prompt, on_token, stop_event=None):
+    # Thread runs blocking ollama.chat() with stream=True
+    # Queue bridges sync thread to async event loop
+    # Timeouts prevent indefinite hangs:
+    #   - STREAM_TOTAL_TIMEOUT_SECONDS (600s) for entire stream
+    #   - STREAM_STALL_TIMEOUT_SECONDS (120s) between tokens
+    # stop_event.is_set() checked in token loop for cancellation
+    # Thread is daemon=True and joined with timeout
+    # finally: block always puts ("done", None) to unblock consumer
+    # Token extraction tolerates missing fields: chunk.get("message", {}).get("content", "")
+```
+
+App-level timeouts:
+```python
+QUEUE_ITEM_TIMEOUT = 120  # 2 min wait for each queue item
+TOTAL_TIMEOUT = 900       # 15 min max total streaming time
+# Transfer task wrapped in try/finally for cleanup
 ```
 
 ## Environment Variables
@@ -333,13 +456,16 @@ ollama list
 
 ### Tab 1: Ask the Council
 - File upload (optional) - .txt, .md, .pdf, .docx
+- PHI warning banner (shown when document uploaded)
 - File info display with preview
-- Question input
+- Model preset buttons (Fast / Balanced / Deep)
 - Model checkboxes
-- Submit button + Stop Deliberation button
+- Example prompt dropdown
+- Question input
+- Submit button + Stop Deliberation button (elem_id="stop_btn")
 - Stop confirmation options (Clear Session / Synthesize Now)
 - Chairman's final answer
-- Consensus meter
+- Consensus meter (with coverage stats)
 - Response composition meter
 
 ### Tab 3: Settings
