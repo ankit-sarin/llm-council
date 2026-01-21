@@ -133,6 +133,23 @@ class CouncilResult:
 
 ## Features
 
+### Privacy & Session Saving
+Sessions are **not saved by default** - users must explicitly click "Save Session to History" to save.
+
+When a document is uploaded, a red warning banner appears:
+- Warns users not to upload PHI/PII
+- Explains that document contents are sent to AI models
+
+Before saving, common identifiers are automatically redacted:
+- Email addresses → `[EMAIL REDACTED]`
+- Phone numbers → `[PHONE REDACTED]`
+- SSNs → `[SSN REDACTED]`
+- MRNs/Medical records → `[MRN REDACTED]`
+- Dates of birth → `[DOB REDACTED]`
+- Credit card numbers → `[CARD REDACTED]`
+
+The `sessions/` directory is excluded via `.gitignore`.
+
 ### Chairman Independent Thinking & Web Search
 The chairman (Claude Opus 4.5) can now:
 - Add independent insights beyond just summarizing council responses

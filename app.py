@@ -34,8 +34,70 @@ from council import (
 
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
+
+# --- PII/PHI Redaction ---
+
+# Regex patterns for common identifiers
+# Order matters: more specific patterns (with context like "MRN:") should come before generic patterns
+PII_PATTERNS = [
+    # Email addresses
+    (re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'), '[EMAIL REDACTED]'),
+    # Phone numbers (various formats: 123-456-7890, (123) 456-7890, 123.456.7890, +1 123 456 7890)
+    (re.compile(r'\b(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b'), '[PHONE REDACTED]'),
+    # Medical Record Numbers - MUST come before SSN pattern (MRNs often look like SSNs but have context)
+    (re.compile(r'\bMRN[:\s#]*\d{4,12}\b', re.IGNORECASE), '[MRN REDACTED]'),
+    (re.compile(r'\b(?:medical\s*record|patient\s*id|chart\s*#?)[:\s#]*\d{4,12}\b', re.IGNORECASE), '[MRN REDACTED]'),
+    # Dates of birth in common formats - MUST come before SSN pattern
+    (re.compile(r'\b(?:DOB|date\s*of\s*birth)[:\s]*\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b', re.IGNORECASE), '[DOB REDACTED]'),
+    # Social Security Numbers (123-45-6789 or 123456789) - generic pattern, apply last
+    (re.compile(r'\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b'), '[SSN REDACTED]'),
+    # Credit card numbers (16 digits, with or without spaces/dashes)
+    (re.compile(r'\b(?:\d{4}[-\s]?){3}\d{4}\b'), '[CARD REDACTED]'),
+]
+
+
+def redact_pii(text: str) -> str:
+    """
+    Redact common PII/PHI patterns from text before saving.
+
+    Args:
+        text: The text to redact
+
+    Returns:
+        Text with PII/PHI patterns replaced with redaction markers
+    """
+    if not text:
+        return text
+
+    redacted = text
+    for pattern, replacement in PII_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
+
+    return redacted
+
+
+def redact_session_data(data: dict) -> dict:
+    """
+    Recursively redact PII/PHI from session data before saving.
+
+    Args:
+        data: Session data dictionary
+
+    Returns:
+        Session data with PII/PHI redacted from string values
+    """
+    if isinstance(data, str):
+        return redact_pii(data)
+    elif isinstance(data, dict):
+        return {k: redact_session_data(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [redact_session_data(item) for item in data]
+    else:
+        return data
+
 
 # --- Session Storage ---
 
@@ -121,6 +183,9 @@ def save_session(
             "web_searches_performed": composition.web_searches_performed,
             "chairman_insights": composition.chairman_insights
         }
+
+    # Redact PII/PHI before saving
+    session_data = redact_session_data(session_data)
 
     filepath = SESSIONS_DIR / f"session_{session_id}.json"
     with open(filepath, "w") as f:
@@ -1501,8 +1566,20 @@ def create_app():
                 </div>
                 '''
 
+            # PHI warning banner - always shown when a document is uploaded
+            phi_warning = '''
+            <div style="background: #ffebee; border: 3px solid #d32f2f; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                <strong style="color: #c62828; font-size: 1.1em;">⚠️ PHI/PII WARNING</strong>
+                <p style="color: #b71c1c; margin: 8px 0 0 0; font-size: 0.95em;">
+                    <strong>Do not upload documents containing Protected Health Information (PHI) or sensitive personal data.</strong>
+                    Document contents are sent to AI models and may be logged. If you save this session, common identifiers will be redacted but full protection cannot be guaranteed.
+                </p>
+            </div>
+            '''
+
             # Format the info display
             info_html = f'''
+            {phi_warning}
             <div style="background: #e8f5e9; border: 2px solid #4CAF50; border-radius: 8px; padding: 12px;">
                 <div style="margin-bottom: 8px;">
                     <strong>📄 {info["filename"]}</strong> ({info["size_display"]})
