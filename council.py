@@ -107,6 +107,27 @@ async def _call_ollama(model: str, prompt: str) -> ModelResponse:
 STREAM_TOTAL_TIMEOUT_SECONDS = 600  # 10 minutes max for any single model response
 STREAM_STALL_TIMEOUT_SECONDS = 120  # 2 minutes without receiving a token = stalled
 
+# VRAM-aware cooldown parameters
+COOLDOWN_BASE_SECONDS = 1.0  # Minimum cooldown between batches
+COOLDOWN_PER_10GB_SECONDS = 0.5  # Additional seconds per 10GB of VRAM in completed batch
+
+
+def calculate_batch_cooldown(batch: list[str]) -> float:
+    """
+    Calculate VRAM-aware cooldown time after a batch completes.
+
+    Larger batches using more VRAM need longer cooldowns for GPU memory to clear.
+
+    Args:
+        batch: List of model IDs that just completed
+
+    Returns:
+        Cooldown time in seconds
+    """
+    batch_vram = sum(get_model_vram(m) for m in batch)
+    cooldown = COOLDOWN_BASE_SECONDS + (batch_vram / 10.0) * COOLDOWN_PER_10GB_SECONDS
+    return round(cooldown, 1)
+
 
 async def _call_ollama_streaming(
     model: str,
@@ -404,10 +425,11 @@ YOUR RESPONSE:"""
         tasks = [asyncio.create_task(run_model(m)) for m in batch]
         await asyncio.gather(*tasks)
 
-        # Small delay between batches to let GPU memory clear
+        # VRAM-aware cooldown between batches - larger batches wait longer
         if batch_idx < len(batches) - 1:
-            logger.info("Waiting for GPU memory to clear before next batch...")
-            await asyncio.sleep(2)
+            cooldown = calculate_batch_cooldown(batch)
+            logger.info(f"Cooldown {cooldown}s for GPU memory to clear (batch used ~{sum(get_model_vram(m) for m in batch):.0f}GB)...")
+            await asyncio.sleep(cooldown)
 
     logger.info(f"Stage 1 complete. {len(complete_responses)} responses collected.")
     return complete_responses
@@ -520,9 +542,11 @@ ANALYSIS:
         tasks = [asyncio.create_task(review_model(r)) for r in batch]
         await asyncio.gather(*tasks)
 
+        # VRAM-aware cooldown between batches - larger batches wait longer
         if batch_idx < len(batches) - 1:
-            logger.info("Waiting for GPU memory to clear before next batch...")
-            await asyncio.sleep(2)
+            cooldown = calculate_batch_cooldown(batch)
+            logger.info(f"Cooldown {cooldown}s for GPU memory to clear (batch used ~{sum(get_model_vram(m) for m in batch):.0f}GB)...")
+            await asyncio.sleep(cooldown)
 
     logger.info("Stage 2 complete.")
     return complete_reviews
