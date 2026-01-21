@@ -15,6 +15,7 @@ from config import (
     CHAIRMAN_MODEL,
     DEFAULT_ENABLED_MODELS,
     MODEL_DISPLAY_NAMES,
+    MODEL_PRESETS,
     MAX_CONCURRENT_VRAM_GB,
     get_display_name,
     check_model_context_fit,
@@ -1300,6 +1301,28 @@ def create_app():
                     with gr.Column(scale=1):
                         # --- Model Selection ---
                         gr.Markdown("#### Select Council Members")
+
+                        # Preset buttons for quick selection
+                        gr.Markdown("**Quick Presets:**", elem_classes="preset-label")
+                        with gr.Row():
+                            preset_fast_btn = gr.Button(
+                                MODEL_PRESETS["fast"]["name"],
+                                size="sm",
+                                elem_classes="preset-btn"
+                            )
+                            preset_balanced_btn = gr.Button(
+                                MODEL_PRESETS["balanced"]["name"],
+                                size="sm",
+                                elem_classes="preset-btn"
+                            )
+                            preset_deep_btn = gr.Button(
+                                MODEL_PRESETS["deep"]["name"],
+                                size="sm",
+                                elem_classes="preset-btn"
+                            )
+
+                        gr.Markdown("---")
+
                         model_checkboxes = []
                         for model_id in AVAILABLE_MODELS:
                             display_name = get_display_name(model_id)
@@ -1676,6 +1699,34 @@ def create_app():
             outputs=[file_upload, file_info_display, clear_file_btn, document_state]
         )
 
+        # === Model Preset Handlers ===
+        def apply_preset(preset_key: str):
+            """
+            Apply a model selection preset.
+
+            Args:
+                preset_key: Key from MODEL_PRESETS ("fast", "balanced", "deep")
+
+            Returns:
+                List of checkbox values (True/False) for each model
+            """
+            preset_models = MODEL_PRESETS[preset_key]["models"]
+            return [model_id in preset_models for model_id in AVAILABLE_MODELS]
+
+        # Connect preset buttons to checkbox updates
+        preset_fast_btn.click(
+            fn=lambda: apply_preset("fast"),
+            outputs=model_checkboxes
+        )
+        preset_balanced_btn.click(
+            fn=lambda: apply_preset("balanced"),
+            outputs=model_checkboxes
+        )
+        preset_deep_btn.click(
+            fn=lambda: apply_preset("deep"),
+            outputs=model_checkboxes
+        )
+
         # === Main Submit Action ===
         # Wrapper to collect checkbox values, file content, and call generator
         def collect_and_run(question, document, stop_flag, *checkbox_values):
@@ -1863,6 +1914,16 @@ if __name__ == "__main__":
         css="""
         .council-header { text-align: center; margin-bottom: 20px; }
         .stage-indicator { font-size: 1.1em; padding: 10px; border-radius: 8px; background: #f0f0f0; }
+
+        /* Model preset buttons */
+        .preset-label {
+            margin-bottom: 4px !important;
+            font-size: 0.9em;
+        }
+        .preset-btn {
+            font-size: 0.85em !important;
+            padding: 4px 8px !important;
+        }
 
         /* Model checkboxes styling */
         .model-checkbox {

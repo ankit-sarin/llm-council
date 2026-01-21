@@ -58,6 +58,25 @@ DEFAULT_ENABLED_MODELS: list[str] = [
     "mistral:7b",
 ]
 
+# Model selection presets for quick configuration
+MODEL_PRESETS: dict[str, dict] = {
+    "fast": {
+        "name": "⚡ Fast",
+        "description": "Quick answers with smaller models",
+        "models": ["gemma2:27b", "mistral:7b"],
+    },
+    "balanced": {
+        "name": "⚖️ Balanced",
+        "description": "Good tradeoff of speed and depth",
+        "models": ["qwen2.5:32b", "gemma2:27b", "mistral:7b"],
+    },
+    "deep": {
+        "name": "🔬 Deep",
+        "description": "Thorough analysis with heavy hitters",
+        "models": ["llama3.3:70b", "qwen2.5:32b", "deepseek-r1:32b"],
+    },
+}
+
 # Legacy alias for backward compatibility
 COUNCIL_MODELS = AVAILABLE_MODELS
 
