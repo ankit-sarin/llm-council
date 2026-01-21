@@ -77,6 +77,31 @@ MODEL_PRESETS: dict[str, dict] = {
     },
 }
 
+# Example prompts for first-run usability
+# Domain-specific examples to demonstrate the council's capabilities
+EXAMPLE_PROMPTS: list[dict[str, str]] = [
+    {
+        "label": "🧬 ctDNA Surveillance",
+        "prompt": "What is the current evidence for using ctDNA to guide watch-and-wait strategies in colorectal cancer patients who achieve clinical complete response after neoadjuvant therapy? What detection thresholds and monitoring intervals are recommended?",
+    },
+    {
+        "label": "🤖 Robotic Platforms",
+        "prompt": "Compare the da Vinci Xi, Hugo RAS, and Medtronic Hugo surgical robotic platforms for urologic procedures. What are the key differences in workspace, instrumentation, costs, and clinical outcomes data?",
+    },
+    {
+        "label": "📄 Paper Critique",
+        "prompt": "What are the key methodological considerations when critically appraising a randomized controlled trial? Provide a structured framework for evaluating internal validity, external validity, and risk of bias.",
+    },
+    {
+        "label": "💊 Drug Interaction",
+        "prompt": "A patient on warfarin for atrial fibrillation needs to start amiodarone for rhythm control. What drug interactions should be considered, what monitoring is required, and how should the warfarin dose be adjusted?",
+    },
+    {
+        "label": "🔬 Research Design",
+        "prompt": "What are the advantages and limitations of using propensity score matching versus inverse probability weighting in observational studies? When would you choose one approach over the other?",
+    },
+]
+
 # Legacy alias for backward compatibility
 COUNCIL_MODELS = AVAILABLE_MODELS
 

@@ -16,6 +16,7 @@ from config import (
     DEFAULT_ENABLED_MODELS,
     MODEL_DISPLAY_NAMES,
     MODEL_PRESETS,
+    EXAMPLE_PROMPTS,
     MAX_CONCURRENT_VRAM_GB,
     get_display_name,
     check_model_context_fit,
@@ -1287,6 +1288,17 @@ def create_app():
                             elem_classes="question-input"
                         )
 
+                        # Example prompts for quick start
+                        with gr.Row():
+                            example_dropdown = gr.Dropdown(
+                                label="💡 Try an example",
+                                choices=[""] + [ex["label"] for ex in EXAMPLE_PROMPTS],
+                                value="",
+                                interactive=True,
+                                scale=2,
+                                elem_classes="example-dropdown"
+                            )
+
                         with gr.Row():
                             submit_btn = gr.Button("Submit to Council", variant="primary", size="lg")
                             stop_btn = gr.Button("⏹️ Stop Deliberation", variant="stop", size="lg", visible=False, elem_id="stop_btn")
@@ -1727,6 +1739,30 @@ def create_app():
             outputs=model_checkboxes
         )
 
+        # === Example Prompt Handler ===
+        def load_example_prompt(selection):
+            """
+            Load an example prompt into the question input.
+
+            Args:
+                selection: The selected example label
+
+            Returns:
+                The prompt text, or empty string if no selection
+            """
+            if not selection:
+                return ""
+            for example in EXAMPLE_PROMPTS:
+                if example["label"] == selection:
+                    return example["prompt"]
+            return ""
+
+        example_dropdown.change(
+            fn=load_example_prompt,
+            inputs=[example_dropdown],
+            outputs=[question_input]
+        )
+
         # === Main Submit Action ===
         # Wrapper to collect checkbox values, file content, and call generator
         def collect_and_run(question, document, stop_flag, *checkbox_values):
@@ -1923,6 +1959,15 @@ if __name__ == "__main__":
         .preset-btn {
             font-size: 0.85em !important;
             padding: 4px 8px !important;
+        }
+
+        /* Example prompts dropdown */
+        .example-dropdown {
+            margin-top: 8px;
+        }
+        .example-dropdown label {
+            font-size: 0.9em !important;
+            color: #666 !important;
         }
 
         /* Model checkboxes styling */
