@@ -350,20 +350,17 @@ YOUR RESPONSE:"""
     partial_responses = {m: "" for m in models}
     complete_responses = {}
 
-    # Lock for thread-safe updates
-    import threading
-    lock = threading.Lock()
+    # No lock needed - all mutations happen on the event loop, not from threads.
+    # The Ollama thread only puts tokens in a queue; on_token is called from async code.
 
     async def on_token(model, content):
-        with lock:
-            partial_responses[model] = content
+        partial_responses[model] = content
         await on_token_callback(partial_responses, complete_responses)
 
     async def run_model(model):
         response = await _call_ollama_streaming(model, prompt, on_token, stop_event)
-        with lock:
-            complete_responses[model] = response
-            partial_responses[model] = response.content
+        complete_responses[model] = response
+        partial_responses[model] = response.content
         await on_complete_callback(model, response, complete_responses)
         return response
 
@@ -430,8 +427,7 @@ async def stream_peer_reviews_live(
     partial_reviews = {m: "" for m in responses.keys()}
     complete_reviews = {}
 
-    import threading
-    lock = threading.Lock()
+    # No lock needed - all mutations happen on the event loop, not from threads.
 
     async def review_model(reviewer):
         anonymized, mapping = _anonymize_responses(responses, exclude_model=reviewer)
@@ -461,8 +457,7 @@ ANALYSIS:
 [2-3 sentences maximum. Focus only on key differentiators between responses.]"""
 
         async def on_token(model, content):
-            with lock:
-                partial_reviews[reviewer] = content
+            partial_reviews[reviewer] = content
             await on_token_callback(partial_reviews, complete_reviews)
 
         response = await _call_ollama_streaming(reviewer, prompt, on_token, stop_event)
@@ -480,9 +475,8 @@ ANALYSIS:
             analysis=response.content,
         )
 
-        with lock:
-            complete_reviews[reviewer] = review
-            partial_reviews[reviewer] = response.content
+        complete_reviews[reviewer] = review
+        partial_reviews[reviewer] = response.content
 
         await on_complete_callback(reviewer, review, complete_reviews)
         return review
