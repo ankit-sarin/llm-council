@@ -44,7 +44,7 @@ llm-council/
 ├── requirements.txt    # Python dependencies
 ├── config.py           # Model configuration + VRAM batching
 ├── council.py          # Async council engine with streaming
-├── app.py              # Gradio interface (port 7861)
+├── app.py              # Gradio interface (PORT env, default 7861)
 └── sessions/           # Saved council sessions (JSON)
 ```
 
@@ -444,7 +444,18 @@ ANTHROPIC_API_KEY=sk-ant-...
 # Required for authentication (app will not start without these)
 LLM_COUNCIL_USER=your_username
 LLM_COUNCIL_PASSWORD=your_password
+
+# Optional: Custom port (default: 7861)
+PORT=7861
 ```
+
+## Graceful Shutdown
+
+The app handles SIGTERM and SIGINT signals for clean shutdown:
+- **Ctrl+C (SIGINT)**: Prints "SIGINT received. Shutting down gracefully..." and exits
+- **kill -TERM (SIGTERM)**: Prints "SIGTERM received. Shutting down gracefully..." and exits
+
+This enables proper shutdown in containerized environments (Docker, Kubernetes) and process managers.
 
 ## Authentication
 
@@ -474,9 +485,11 @@ LLM_COUNCIL_PASSWORD=your_password
 export LLM_COUNCIL_USER='admin'
 export LLM_COUNCIL_PASSWORD='secret'
 
-# Run the app
+# Run the app (default port 7861)
 python app.py
-# Runs on http://0.0.0.0:7861 (login required)
+
+# Run on custom port
+PORT=8080 python app.py
 
 # Test Ollama connectivity
 ollama list
