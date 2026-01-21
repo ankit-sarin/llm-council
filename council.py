@@ -136,8 +136,9 @@ async def _call_ollama_streaming(
                 messages=[{"role": "user", "content": prompt}],
                 stream=True
             ):
-                token = chunk["message"]["content"]
-                token_queue.put(("token", token))
+                token = chunk.get("message", {}).get("content", "")
+                if token:  # Only enqueue non-empty tokens
+                    token_queue.put(("token", token))
         except Exception as e:
             error_msg = str(e)
             token_queue.put(("error", error_msg))
