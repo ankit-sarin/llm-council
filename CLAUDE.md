@@ -168,6 +168,12 @@ Users can stop deliberation at any time using the "Stop Deliberation" button:
    - **Clear Session**: Discard all progress and start fresh
    - **Synthesize Now**: Have the chairman synthesize with available data
 
+**Implementation:** Stop uses `asyncio.Event` propagated through all streaming functions:
+- `_call_ollama_streaming(model, prompt, on_token, stop_event)` - checks `stop_event.is_set()` in token loop
+- `stream_initial_responses_live(..., stop_event)` - passes to all model calls
+- `stream_peer_reviews_live(..., stop_event)` - passes to all reviewer calls
+- Stopped responses are marked with `[Stopped by user]` suffix
+
 When stopped early, the chairman uses `get_chairman_early_synthesis()` which:
 - Works with whatever responses have been collected
 - Adds more independent analysis to compensate for limited council input
