@@ -28,6 +28,10 @@ MODEL_VRAM_GB: dict[str, float] = {
 # Adjust this based on your GPU - set higher if you have more VRAM
 MAX_CONCURRENT_VRAM_GB: float = 60.0
 
+# Safety factor applied to VRAM estimates (1.20 = 20% buffer)
+# Accounts for VRAM fragmentation, KV cache growth, and estimation errors
+VRAM_SAFETY_FACTOR: float = 1.20
+
 # Default models enabled on startup (3 models)
 DEFAULT_ENABLED_MODELS: list[str] = [
     "qwen2.5:32b",
@@ -67,9 +71,21 @@ def get_council_with_names() -> list[tuple[str, str]]:
     return [(m, get_display_name(m)) for m in COUNCIL_MODELS]
 
 
-def get_model_vram(model: str) -> float:
-    """Get VRAM requirement for a model in GB."""
-    return MODEL_VRAM_GB.get(model, 10.0)  # Default 10GB if unknown
+def get_model_vram(model: str, with_safety_factor: bool = True) -> float:
+    """
+    Get VRAM requirement for a model in GB.
+
+    Args:
+        model: Model ID
+        with_safety_factor: If True, applies VRAM_SAFETY_FACTOR for conservative estimates
+
+    Returns:
+        VRAM in GB (with safety factor applied by default)
+    """
+    base_vram = MODEL_VRAM_GB.get(model, 10.0)  # Default 10GB if unknown
+    if with_safety_factor:
+        return base_vram * VRAM_SAFETY_FACTOR
+    return base_vram
 
 
 def create_vram_batches(models: list[str], max_vram: float = None) -> list[list[str]]:

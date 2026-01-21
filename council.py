@@ -16,6 +16,7 @@ from anthropic import Anthropic
 from config import (
     CHAIRMAN_MODEL,
     COUNCIL_MODELS,
+    VRAM_SAFETY_FACTOR,
     get_display_name,
     get_model_vram,
     create_vram_batches,
@@ -345,12 +346,12 @@ async def stream_initial_responses_live(
     logger.info(f"Question: {question[:100]}{'...' if len(question) > 100 else ''}")
     if document_text:
         logger.info(f"Document: {len(document_text)} characters provided")
-    logger.info(f"Council members: {len(models)} | Total VRAM: ~{total_vram:.0f}GB | Limit: {MAX_CONCURRENT_VRAM_GB}GB")
+    logger.info(f"Council members: {len(models)} | Total VRAM: ~{total_vram:.0f}GB (incl. {VRAM_SAFETY_FACTOR:.0%} safety) | Limit: {MAX_CONCURRENT_VRAM_GB}GB")
     logger.info(f"Execution mode: {execution_mode} ({len(batches)} batch{'es' if len(batches) > 1 else ''})")
     if len(batches) > 1:
         for i, batch in enumerate(batches):
             batch_vram = sum(get_model_vram(m) for m in batch)
-            logger.info(f"  Batch {i+1}: {[get_display_name(m) for m in batch]} (~{batch_vram:.0f}GB)")
+            logger.info(f"  Batch {i+1}: {[get_display_name(m) for m in batch]} (~{batch_vram:.0f}GB incl. safety)")
     logger.info("=" * 60)
 
     # Build prompt - different format when document is provided
@@ -448,7 +449,7 @@ async def stream_peer_reviews_live(
     logger.info("=" * 60)
     logger.info("STAGE 2: PEER REVIEWS (LIVE STREAMING)")
     logger.info(f"Each of {len(responses)} models reviewing {len(responses)-1} responses")
-    logger.info(f"Total VRAM: ~{total_vram:.0f}GB | Limit: {MAX_CONCURRENT_VRAM_GB}GB")
+    logger.info(f"Total VRAM: ~{total_vram:.0f}GB (incl. {VRAM_SAFETY_FACTOR:.0%} safety) | Limit: {MAX_CONCURRENT_VRAM_GB}GB")
     logger.info(f"Execution mode: {execution_mode} ({len(batches)} batch{'es' if len(batches) > 1 else ''})")
     logger.info("=" * 60)
 
