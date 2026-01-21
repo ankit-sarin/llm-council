@@ -438,15 +438,45 @@ TOTAL_TIMEOUT = 900       # 15 min max total streaming time
 ## Environment Variables
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...  # Required for chairman
+# Required for chairman
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Required for authentication (app will not start without these)
+LLM_COUNCIL_USER=your_username
+LLM_COUNCIL_PASSWORD=your_password
 ```
+
+## Authentication
+
+The app requires authentication to protect access. Users must log in before using the interface.
+
+**Setup:**
+```bash
+export LLM_COUNCIL_USER='your_username'
+export LLM_COUNCIL_PASSWORD='your_password'
+```
+
+Or add to `.env` file (already in `.gitignore`):
+```
+LLM_COUNCIL_USER=your_username
+LLM_COUNCIL_PASSWORD=your_password
+```
+
+**Behavior:**
+- If credentials are not set, the app prints an error and exits
+- Users see a Gradio login screen before accessing the interface
+- Single user/password pair (not multi-user)
 
 ## Commands
 
 ```bash
+# Set credentials first
+export LLM_COUNCIL_USER='admin'
+export LLM_COUNCIL_PASSWORD='secret'
+
 # Run the app
 python app.py
-# Runs on http://0.0.0.0:7861
+# Runs on http://0.0.0.0:7861 (login required)
 
 # Test Ollama connectivity
 ollama list
