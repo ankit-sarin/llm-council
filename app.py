@@ -883,7 +883,8 @@ async def run_council_streaming(
     # Pass document_text if a file was uploaded
     responses = await stream_initial_responses_live(
         question, active_models, on_token_stage1, on_complete_stage1,
-        document_text=document_text
+        document_text=document_text,
+        stop_event=stop_event
     )
     complete_responses = responses
 
@@ -1002,7 +1003,7 @@ async def run_council_streaming(
         ))
 
     # Run Stage 2 with live streaming
-    reviews = await stream_peer_reviews_live(question, responses, on_token_stage2, on_complete_stage2)
+    reviews = await stream_peer_reviews_live(question, responses, on_token_stage2, on_complete_stage2, stop_event=stop_event)
     complete_reviews = reviews
 
     # Check if deliberation was stopped during reviews

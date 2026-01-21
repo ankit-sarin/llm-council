@@ -102,11 +102,25 @@ async def _call_ollama(model: str, prompt: str) -> ModelResponse:
         return ModelResponse(model=model, content=f"[Error: {e}]", elapsed_seconds=elapsed)
 
 
-async def _call_ollama_streaming(model: str, prompt: str, on_token) -> ModelResponse:
-    """Call Ollama with token streaming, calling on_token for each chunk."""
+async def _call_ollama_streaming(
+    model: str,
+    prompt: str,
+    on_token,
+    stop_event: asyncio.Event | None = None
+) -> ModelResponse:
+    """
+    Call Ollama with token streaming, calling on_token for each chunk.
+
+    Args:
+        model: The model name to call
+        prompt: The prompt to send
+        on_token: Callback function for each token
+        stop_event: Optional asyncio.Event to signal stopping early
+    """
     logger.info(f"[{get_display_name(model)}] Starting streaming generation...")
     start = time.perf_counter()
     content = ""
+    was_stopped = False
 
     try:
         import queue
@@ -131,6 +145,12 @@ async def _call_ollama_streaming(model: str, prompt: str, on_token) -> ModelResp
         thread.start()
 
         while True:
+            # Check if stop was requested
+            if stop_event is not None and stop_event.is_set():
+                logger.info(f"[{get_display_name(model)}] Stop requested, halting stream")
+                was_stopped = True
+                break
+
             # Non-blocking check with small timeout, then yield to event loop
             try:
                 msg_type, data = token_queue.get(timeout=0.05)
@@ -149,9 +169,15 @@ async def _call_ollama_streaming(model: str, prompt: str, on_token) -> ModelResp
                 if not thread.is_alive() and token_queue.empty():
                     break
 
-        thread.join()
+        thread.join(timeout=1.0)  # Don't wait forever if stopped
         elapsed = time.perf_counter() - start
-        logger.info(f"[{get_display_name(model)}] Done in {elapsed:.1f}s ({len(content)} chars)")
+
+        if was_stopped:
+            content = content + "\n\n[Stopped by user]" if content else "[Stopped by user]"
+            logger.info(f"[{get_display_name(model)}] Stopped after {elapsed:.1f}s ({len(content)} chars)")
+        else:
+            logger.info(f"[{get_display_name(model)}] Done in {elapsed:.1f}s ({len(content)} chars)")
+
         return ModelResponse(model=model, content=content, elapsed_seconds=elapsed)
 
     except Exception as e:
@@ -243,7 +269,8 @@ async def stream_initial_responses_live(
     models: list[str],
     on_token_callback,
     on_complete_callback,
-    document_text: str | None = None
+    document_text: str | None = None,
+    stop_event: asyncio.Event | None = None
 ):
     """
     Stream initial responses with live token updates.
@@ -256,6 +283,7 @@ async def stream_initial_responses_live(
         on_token_callback: async function(partial_responses: dict) called on each token
         on_complete_callback: async function(model, response, all_responses) called when model completes
         document_text: Optional text from an uploaded document to analyze
+        stop_event: Optional asyncio.Event to signal stopping early
     """
     from config import MAX_CONCURRENT_VRAM_GB
 
@@ -320,7 +348,7 @@ YOUR RESPONSE:"""
         await on_token_callback(partial_responses, complete_responses)
 
     async def run_model(model):
-        response = await _call_ollama_streaming(model, prompt, on_token)
+        response = await _call_ollama_streaming(model, prompt, on_token, stop_event)
         with lock:
             complete_responses[model] = response
             partial_responses[model] = response.content
@@ -347,7 +375,13 @@ YOUR RESPONSE:"""
     return complete_responses
 
 
-async def stream_peer_reviews_live(question: str, responses: dict[str, ModelResponse], on_token_callback, on_complete_callback):
+async def stream_peer_reviews_live(
+    question: str,
+    responses: dict[str, ModelResponse],
+    on_token_callback,
+    on_complete_callback,
+    stop_event: asyncio.Event | None = None
+):
     """
     Stream peer reviews with live token updates.
     Runs all reviewers in parallel unless total VRAM exceeds the limit.
@@ -357,6 +391,7 @@ async def stream_peer_reviews_live(question: str, responses: dict[str, ModelResp
         responses: Dict of model responses from stage 1
         on_token_callback: async function(partial_reviews: dict) called on each token
         on_complete_callback: async function(reviewer, review, all_reviews) called when review completes
+        stop_event: Optional asyncio.Event to signal stopping early
     """
     from config import MAX_CONCURRENT_VRAM_GB
 
@@ -418,7 +453,7 @@ ANALYSIS:
                 partial_reviews[reviewer] = content
             await on_token_callback(partial_reviews, complete_reviews)
 
-        response = await _call_ollama_streaming(reviewer, prompt, on_token)
+        response = await _call_ollama_streaming(reviewer, prompt, on_token, stop_event)
 
         rankings = []
         for letter in mapping.keys():
