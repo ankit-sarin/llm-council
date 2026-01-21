@@ -736,6 +736,11 @@ def format_composition_meter(composition: ResponseComposition | None) -> str:
             <span>Web Search: <strong>{web_pct:.0f}%</strong></span>
         </div>
     </div>
+
+    <!-- Explanation -->
+    <div style="margin-top: 8px; font-size: 0.85em; color: #666; font-style: italic;">
+        Council % reflects how much of the synthesis derives from council outputs versus independent chairman reasoning.
+    </div>
 '''
 
     # Show web searches if any were performed
