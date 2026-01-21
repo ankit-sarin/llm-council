@@ -1289,7 +1289,7 @@ def create_app():
 
                         with gr.Row():
                             submit_btn = gr.Button("Submit to Council", variant="primary", size="lg")
-                            stop_btn = gr.Button("⏹️ Stop Deliberation", variant="stop", size="lg", visible=False)
+                            stop_btn = gr.Button("⏹️ Stop Deliberation", variant="stop", size="lg", visible=False, elem_id="stop_btn")
 
                         # Stop confirmation row (hidden by default)
                         with gr.Row(visible=False) as stop_confirm_row:
@@ -1997,13 +1997,13 @@ if __name__ == "__main__":
             font-weight: bold !important;
         }
 
-        /* Stop button styling */
-        button[variant="stop"] {
+        /* Stop button styling - use elem_id for Gradio version compatibility */
+        #stop_btn {
             background: #f44336 !important;
             border-color: #d32f2f !important;
             color: white !important;
         }
-        button[variant="stop"]:hover {
+        #stop_btn:hover {
             background: #d32f2f !important;
         }
         """,
