@@ -756,7 +756,9 @@ async def run_council_streaming(
     # Throttle updates to avoid overwhelming the UI
     import time as time_module
     last_update = [0]
-    update_interval = 0.3  # Update UI every 300ms max
+    update_interval = 0.1  # Update UI every 100ms max (reduced for better proxy/tunnel compatibility)
+    keepalive_interval = 5.0  # Force update every 5s to prevent proxy timeout
+    last_keepalive = [0]
 
     # --- Stage 1: Initial Responses with live streaming ---
     await update_queue.put((
@@ -773,9 +775,12 @@ async def run_council_streaming(
     # Token callback - update UI with partial responses
     async def on_token_stage1(partial_responses, done_responses):
         now = time_module.time()
-        if now - last_update[0] < update_interval:
+        # Allow update if: throttle interval passed OR keepalive interval passed (prevents proxy timeout)
+        needs_keepalive = now - last_keepalive[0] >= keepalive_interval
+        if now - last_update[0] < update_interval and not needs_keepalive:
             return  # Throttle updates
         last_update[0] = now
+        last_keepalive[0] = now
 
         completed = len(done_responses)
         total = len(active_models)
@@ -891,9 +896,12 @@ async def run_council_streaming(
     # Token callback for Stage 2
     async def on_token_stage2(partial_reviews, done_reviews):
         now = time_module.time()
-        if now - last_update[0] < update_interval:
+        # Allow update if: throttle interval passed OR keepalive interval passed (prevents proxy timeout)
+        needs_keepalive = now - last_keepalive[0] >= keepalive_interval
+        if now - last_update[0] < update_interval and not needs_keepalive:
             return
         last_update[0] = now
+        last_keepalive[0] = now
 
         completed = len(done_reviews)
         total = len(reviewer_models)
@@ -1722,6 +1730,13 @@ if __name__ == "__main__":
         server_port=7861,
         share=False,
         show_error=True,
+        # Improve proxy/tunnel compatibility for mobile access
+        # root_path handles reverse proxy path forwarding (e.g., Cloudflare Tunnel)
+        root_path="",
+        # Disable SSR for better streaming compatibility with reverse proxies
+        ssr_mode=False,
+        # Increase max_file_size for document uploads (default is often lower)
+        max_file_size="15mb",
         theme=gr.themes.Soft(),
         css="""
         .council-header { text-align: center; margin-bottom: 20px; }
