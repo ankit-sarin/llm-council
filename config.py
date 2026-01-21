@@ -24,6 +24,25 @@ MODEL_VRAM_GB: dict[str, float] = {
     "llama3.2:3b": 2.0,
 }
 
+# Context window limits in tokens for each model
+# Used to determine if a model can handle uploaded documents
+MODEL_CONTEXT_TOKENS: dict[str, int] = {
+    "llama3.3:70b": 128000,   # 128K context
+    "qwen2.5:32b": 32000,     # 32K context
+    "gemma2:27b": 8000,       # 8K context (limited)
+    "deepseek-r1:32b": 64000, # 64K context
+    "mistral:7b": 32000,      # 32K context
+    "llama3.2:3b": 128000,    # 128K context
+}
+
+# Approximate characters per token (conservative estimate)
+# Most models average 3-4 chars/token; we use 3 to be safe
+CHARS_PER_TOKEN: float = 3.0
+
+# Safety margin for context usage (reserve for prompt + response)
+# 0.7 means we only use 70% of context for the document
+CONTEXT_SAFETY_MARGIN: float = 0.7
+
 # Maximum VRAM to use concurrently (leave some headroom)
 # Adjust this based on your GPU - set higher if you have more VRAM
 MAX_CONCURRENT_VRAM_GB: float = 60.0
@@ -135,3 +154,98 @@ def create_vram_batches(models: list[str], max_vram: float = None) -> list[list[
         batches.append(current_batch)
 
     return batches
+
+
+def get_model_context_limit(model: str) -> int:
+    """
+    Get context window limit in tokens for a model.
+
+    Args:
+        model: Model ID
+
+    Returns:
+        Context limit in tokens (default 32000 if unknown)
+    """
+    return MODEL_CONTEXT_TOKENS.get(model, 32000)
+
+
+def get_model_max_chars(model: str) -> int:
+    """
+    Get maximum document characters a model can handle.
+
+    Applies safety margin to reserve space for prompt and response.
+
+    Args:
+        model: Model ID
+
+    Returns:
+        Maximum characters for document content
+    """
+    context_tokens = get_model_context_limit(model)
+    usable_tokens = int(context_tokens * CONTEXT_SAFETY_MARGIN)
+    return int(usable_tokens * CHARS_PER_TOKEN)
+
+
+def check_model_context_fit(model: str, char_count: int) -> dict:
+    """
+    Check if a model can handle a document of given length.
+
+    Args:
+        model: Model ID
+        char_count: Number of characters in the document
+
+    Returns:
+        Dict with:
+            - fits: bool - True if document fits in context
+            - max_chars: int - Maximum chars the model can handle
+            - utilization: float - Percentage of context used (0-100+)
+            - warning: str | None - Warning message if approaching limit
+    """
+    max_chars = get_model_max_chars(model)
+    utilization = (char_count / max_chars * 100) if max_chars > 0 else 100
+
+    fits = char_count <= max_chars
+    warning = None
+
+    if not fits:
+        warning = f"Document ({char_count:,} chars) exceeds {get_display_name(model)} context limit ({max_chars:,} chars)"
+    elif utilization > 80:
+        warning = f"Document uses {utilization:.0f}% of {get_display_name(model)} context - may truncate"
+
+    return {
+        "fits": fits,
+        "max_chars": max_chars,
+        "utilization": utilization,
+        "warning": warning,
+    }
+
+
+def filter_models_by_context(models: list[str], char_count: int) -> tuple[list[str], list[dict]]:
+    """
+    Filter models that can handle a document of given length.
+
+    Args:
+        models: List of model IDs to check
+        char_count: Number of characters in the document
+
+    Returns:
+        Tuple of:
+            - List of models that can handle the document
+            - List of exclusion details for models that can't
+    """
+    compatible = []
+    excluded = []
+
+    for model in models:
+        check = check_model_context_fit(model, char_count)
+        if check["fits"]:
+            compatible.append(model)
+        else:
+            excluded.append({
+                "model": model,
+                "display_name": get_display_name(model),
+                "max_chars": check["max_chars"],
+                "reason": check["warning"],
+            })
+
+    return compatible, excluded

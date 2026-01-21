@@ -17,6 +17,8 @@ from config import (
     MODEL_DISPLAY_NAMES,
     MAX_CONCURRENT_VRAM_GB,
     get_display_name,
+    check_model_context_fit,
+    filter_models_by_context,
 )
 from council import (
     CouncilResult,
@@ -282,7 +284,6 @@ MAX_FILE_SIZE_MB = 10  # Maximum file size in megabytes
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024  # Convert to bytes
 MAX_TEXT_CHARS = 150000  # Maximum characters to extract from a file
 LONG_DOC_WARNING_CHARS = 100000  # Show warning if document exceeds this
-GEMMA_EXCLUSION_CHARS = 30000  # Exclude Gemma 2 (8K context) if document exceeds this
 
 
 # --- File Text Extraction ---
@@ -462,7 +463,9 @@ def get_file_info(file_path: str) -> dict:
     char_count = len(text)
     is_long = char_count > LONG_DOC_WARNING_CHARS
     is_truncated = char_count >= MAX_TEXT_CHARS
-    exclude_gemma = char_count > GEMMA_EXCLUSION_CHARS  # Gemma 2 has 8K context limit
+
+    # Check which models can handle this document length
+    compatible_models, excluded_models = filter_models_by_context(AVAILABLE_MODELS, char_count)
 
     # Create preview (first 500 chars)
     preview = text[:500] + ("..." if len(text) > 500 else "")
@@ -476,7 +479,7 @@ def get_file_info(file_path: str) -> dict:
         "preview": preview,
         "is_long": is_long,
         "is_truncated": is_truncated,
-        "exclude_gemma": exclude_gemma,  # True if doc exceeds 30K chars
+        "excluded_models": excluded_models,  # Models that can't handle this doc length
         "error": None
     }
 
@@ -1579,12 +1582,21 @@ def create_app():
             if info.get("is_long"):
                 warnings.append("⚠️ Long document - some models may truncate")
 
-            # Show Gemma exclusion note if document exceeds 30K chars
-            gemma_note = ""
-            if info.get("exclude_gemma"):
-                gemma_note = '''
+            # Build model exclusion note if any models can't handle the document
+            excluded_models = info.get("excluded_models", [])
+            exclusion_note = ""
+            if excluded_models:
+                excluded_names = [e["display_name"] for e in excluded_models]
+                if len(excluded_names) == 1:
+                    exclusion_note = f'''
                 <div style="background: #e3f2fd; border: 1px solid #2196F3; border-radius: 4px; padding: 8px; margin-top: 8px;">
-                    ℹ️ <strong>Note:</strong> Gemma 2 excluded for this query due to document length (8K context limit)
+                    ℹ️ <strong>Note:</strong> {excluded_names[0]} will be excluded (document exceeds context limit)
+                </div>
+                '''
+                else:
+                    exclusion_note = f'''
+                <div style="background: #e3f2fd; border: 1px solid #2196F3; border-radius: 4px; padding: 8px; margin-top: 8px;">
+                    ℹ️ <strong>Note:</strong> {len(excluded_names)} models will be excluded due to context limits: {", ".join(excluded_names)}
                 </div>
                 '''
 
@@ -1619,17 +1631,19 @@ def create_app():
 {info["preview"]}
                 </div>
                 {warning_html}
-                {gemma_note}
+                {exclusion_note}
             </div>
             '''
 
             # Store document info in state for use during council session
+            # Include list of excluded model IDs for filtering during selection
+            excluded_model_ids = [e["model"] for e in excluded_models]
             document_dict = {
                 "filename": info["filename"],
                 "char_count": info["char_count"],
                 "text": info["text"],
                 "preview": info["text"][:1000],  # First 1000 chars for session saving
-                "exclude_gemma": info.get("exclude_gemma", False)  # Exclude Gemma if >30K chars
+                "excluded_models": excluded_model_ids,  # Models to exclude due to context limits
             }
 
             return (
@@ -1677,16 +1691,17 @@ def create_app():
             # Reset stop flag at start
             stop_flag[0] = False
 
-            # Check if we need to exclude Gemma 2 due to document length
-            exclude_gemma = document.get("exclude_gemma", False) if document else False
+            # Get list of models excluded due to context limits
+            excluded_models = document.get("excluded_models", []) if document else []
 
-            # Build list of selected model display names
+            # Build list of selected model display names, excluding models that can't handle the document
             selected = []
             for i, is_checked in enumerate(checkbox_values):
                 if is_checked:
                     model_id = AVAILABLE_MODELS[i]
-                    # Skip Gemma 2 if document exceeds 30K chars (8K context limit)
-                    if exclude_gemma and "gemma2" in model_id.lower():
+                    # Skip models that can't handle the document length
+                    if model_id in excluded_models:
+                        logger.info(f"Excluding {get_display_name(model_id)} - document exceeds context limit")
                         continue
                     selected.append(get_display_name(model_id))
 
