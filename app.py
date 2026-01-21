@@ -1933,12 +1933,36 @@ def create_app():
 # --- Entry Point ---
 
 if __name__ == "__main__":
+    # Check for required authentication credentials
+    auth_user = os.environ.get("LLM_COUNCIL_USER")
+    auth_password = os.environ.get("LLM_COUNCIL_PASSWORD")
+
+    if not auth_user or not auth_password:
+        print("=" * 60)
+        print("ERROR: Authentication credentials not configured!")
+        print("=" * 60)
+        print()
+        print("LLM Council requires authentication to protect access.")
+        print("Please set the following environment variables:")
+        print()
+        print("  export LLM_COUNCIL_USER='your_username'")
+        print("  export LLM_COUNCIL_PASSWORD='your_password'")
+        print()
+        print("Or add them to your .env file.")
+        print("=" * 60)
+        import sys
+        sys.exit(1)
+
+    print(f"Authentication enabled for user: {auth_user}")
+
     app = create_app()
     app.launch(
         server_name="0.0.0.0",
         server_port=7861,
         share=False,
         show_error=True,
+        # Authentication - users must log in before accessing the interface
+        auth=(auth_user, auth_password),
         # Improve proxy/tunnel compatibility for mobile access
         # root_path handles reverse proxy path forwarding (e.g., Cloudflare Tunnel)
         root_path="",
