@@ -1443,7 +1443,7 @@ def create_app():
                 )
 
             # === TAB 4: History ===
-            with gr.Tab("History"):
+            with gr.Tab("History") as history_tab:
                 gr.Markdown("### Past Council Sessions")
                 gr.Markdown("Browse and export previous deliberations.")
 
@@ -1459,7 +1459,7 @@ def create_app():
                 )
 
                 with gr.Row():
-                    session_info = gr.HTML(value="<em>Select a session to view details</em>")
+                    session_info = gr.HTML(value="<em>Click 🔄 Refresh to load past sessions</em>")
 
                 with gr.Accordion("Session Details", open=True):
                     session_question = gr.Markdown(value="")
@@ -1559,8 +1559,8 @@ def create_app():
                     outputs=[markdown_output]
                 )
 
-                # Load sessions on startup
-                app.load(
+                # Auto-refresh sessions when History tab is selected
+                history_tab.select(
                     fn=refresh_sessions,
                     outputs=[session_dropdown, session_info]
                 )
