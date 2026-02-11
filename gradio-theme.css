@@ -1,0 +1,210 @@
+/*
+ * Digital Surgeon — Gradio Theme Override
+ * Apply via: gr.Blocks(css=open("path/to/gradio-theme.css").read())
+ * 
+ * Brand: Ankit Sarin, MD — digitalsurgeon.dev
+ * Palette: Surgeon's Study — Mist Teal backgrounds, Slate Blue border
+ * Typography: Fraunces (headings) + IBM Plex Sans (body)
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  --ds-primary: #0A5E56;
+  --ds-primary-mid: #3D8B82;
+  --ds-primary-light: #DFF0ED;
+  --ds-dark: #2C2C2C;
+  --ds-accent: #B85D3A;
+  --ds-accent-light: #F2E0D6;
+  --ds-surface: #DFEBE9;
+  --ds-bg: #EEF5F4;
+  --ds-text: #2C2C2C;
+  --ds-text-muted: #6B6B6B;
+  --ds-border: #C5CDD6;
+}
+
+/* ── Global ── */
+body, .gradio-container {
+  font-family: 'IBM Plex Sans', Calibri, sans-serif !important;
+  background-color: var(--ds-bg) !important;
+  color: var(--ds-text) !important;
+}
+
+/* ── Headings ── */
+h1, h2, h3, h4, .prose h1, .prose h2, .prose h3 {
+  font-family: 'Fraunces', Georgia, serif !important;
+  color: var(--ds-primary) !important;
+  letter-spacing: -0.01em;
+}
+
+/* ── App title ── */
+.app.svelte-182sui8 .title,
+.app .title,
+#component-0 h1 {
+  font-family: 'Fraunces', Georgia, serif !important;
+  color: var(--ds-primary) !important;
+  font-weight: 600 !important;
+}
+
+/* ── Primary buttons ── */
+.primary.svelte-cmf5ev,
+button.primary,
+.gr-button-primary,
+.gr-button.primary {
+  background-color: var(--ds-primary) !important;
+  border-color: var(--ds-primary) !important;
+  color: white !important;
+  font-family: 'IBM Plex Sans', sans-serif !important;
+  font-weight: 500 !important;
+  border-radius: 6px !important;
+}
+
+.primary.svelte-cmf5ev:hover,
+button.primary:hover,
+.gr-button-primary:hover {
+  background-color: var(--ds-primary-mid) !important;
+  border-color: var(--ds-primary-mid) !important;
+}
+
+/* ── Secondary buttons ── */
+.secondary.svelte-cmf5ev,
+button.secondary,
+.gr-button-secondary {
+  background-color: var(--ds-surface) !important;
+  border-color: var(--ds-border) !important;
+  color: var(--ds-text) !important;
+  border-radius: 6px !important;
+}
+
+.secondary.svelte-cmf5ev:hover,
+button.secondary:hover {
+  background-color: var(--ds-border) !important;
+}
+
+/* ── Stop / destructive buttons ── */
+.stop.svelte-cmf5ev,
+button.stop {
+  background-color: var(--ds-accent) !important;
+  border-color: var(--ds-accent) !important;
+  color: white !important;
+}
+
+/* ── Input fields ── */
+textarea, input[type="text"], input[type="password"],
+.gr-input, .gr-text-input {
+  font-family: 'IBM Plex Sans', sans-serif !important;
+  border-color: var(--ds-border) !important;
+  background-color: white !important;
+  color: var(--ds-text) !important;
+  border-radius: 6px !important;
+}
+
+textarea:focus, input:focus {
+  border-color: var(--ds-primary) !important;
+  box-shadow: 0 0 0 2px rgba(10, 94, 86, 0.15) !important;
+}
+
+/* ── Tabs ── */
+.tab-nav button,
+.tabs .tab-nav button {
+  font-family: 'IBM Plex Sans', sans-serif !important;
+  font-weight: 500 !important;
+  color: var(--ds-text-muted) !important;
+}
+
+.tab-nav button.selected,
+.tabs .tab-nav button.selected {
+  color: var(--ds-primary) !important;
+  border-bottom-color: var(--ds-primary) !important;
+}
+
+/* ── Chatbot messages ── */
+.message.bot .message-content,
+.message.bot {
+  background-color: var(--ds-primary-light) !important;
+  border-color: var(--ds-border) !important;
+}
+
+.message.user .message-content,
+.message.user {
+  background-color: white !important;
+  border: 1px solid var(--ds-border) !important;
+}
+
+/* ── Code blocks ── */
+code, pre, .code {
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', Consolas, monospace !important;
+  background-color: var(--ds-surface) !important;
+  border-radius: 4px;
+}
+
+/* ── Accordion ── */
+.accordion .label-wrap {
+  font-family: 'IBM Plex Sans', sans-serif !important;
+  font-weight: 500 !important;
+  color: var(--ds-primary) !important;
+}
+
+/* ── Checkbox and radio ── */
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  accent-color: var(--ds-primary) !important;
+}
+
+/* ── Dropdown ── */
+.gr-dropdown, select {
+  font-family: 'IBM Plex Sans', sans-serif !important;
+  border-color: var(--ds-border) !important;
+  border-radius: 6px !important;
+}
+
+/* ── Footer ── */
+footer, .footer {
+  font-family: 'IBM Plex Sans', sans-serif !important;
+  color: var(--ds-text-muted) !important;
+  font-size: 12px;
+}
+
+/* ── Links ── */
+a { color: var(--ds-primary) !important; }
+a:hover { color: var(--ds-primary-mid) !important; }
+
+/* ── Slider ── */
+input[type="range"]::-webkit-slider-thumb {
+  background-color: var(--ds-primary) !important;
+}
+
+/* ── Progress bar ── */
+.progress-bar, .eta-bar {
+  background-color: var(--ds-primary) !important;
+}
+
+/* ── Alert / warning ── */
+.gr-panel, .warning {
+  border-left: 3px solid var(--ds-accent) !important;
+  background-color: var(--ds-accent-light) !important;
+}
+
+/* ── Tables ── */
+table thead {
+  background-color: var(--ds-primary) !important;
+  color: white !important;
+}
+
+table tbody tr:nth-child(even) {
+  background-color: var(--ds-bg) !important;
+}
+
+table td, table th {
+  border-color: var(--ds-border) !important;
+  font-family: 'IBM Plex Sans', sans-serif !important;
+}
+
+/* ── Scrollbar (Webkit) ── */
+::-webkit-scrollbar-thumb {
+  background-color: var(--ds-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ds-text-muted);
+}

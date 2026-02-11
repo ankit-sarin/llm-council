@@ -1247,7 +1247,11 @@ def run_council_generator(
 def create_app():
     """Create the Gradio application."""
 
-    with gr.Blocks(title="LLM Council") as app:
+    _css_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gradio-theme.css")
+    with open(_css_path, "r") as f:
+        brand_css = f.read()
+
+    with gr.Blocks(title="LLM Council", css=brand_css) as app:
 
         gr.Markdown(
             """
