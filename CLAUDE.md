@@ -457,6 +457,15 @@ The app handles SIGTERM and SIGINT signals for clean shutdown:
 
 This enables proper shutdown in containerized environments (Docker, Kubernetes) and process managers.
 
+## Port Conflict Recovery
+
+On startup, `ensure_port_available(port)` checks whether the configured port is free:
+- **Port free:** Startup continues normally
+- **Stale LLM Council process:** Automatically sends SIGTERM, waits 5s, then SIGKILL if needed, and reclaims the port
+- **Another process:** Prints a clear error identifying the PID and process name, then exits
+
+The systemd service has restart limits (`StartLimitBurst=5` / `StartLimitIntervalSec=60`) to prevent infinite crash loops — after 5 failures in 60 seconds, systemd stops retrying. `RestartSec=10` gives the port time to release between attempts.
+
 ## Authentication
 
 The app requires authentication to protect access. Users must log in before using the interface.

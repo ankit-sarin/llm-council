@@ -1939,6 +1939,121 @@ def create_app():
     return app
 
 
+# --- Port Conflict Detection ---
+
+def _find_port_pid(port):
+    """Find the PID of the process using the given port. Returns int or None."""
+    import subprocess
+    # Try lsof first
+    try:
+        result = subprocess.run(
+            ["lsof", "-ti", f":{port}"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            # May return multiple PIDs; take the first
+            return int(result.stdout.strip().splitlines()[0])
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        pass
+
+    # Fallback: parse /proc/net/tcp
+    try:
+        hex_port = f"{port:04X}"
+        with open("/proc/net/tcp") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 10:
+                    continue
+                local_addr = parts[1]
+                state = parts[3]
+                if state == "0A" and local_addr.endswith(f":{hex_port}"):
+                    return int(parts[9]) if int(parts[9]) > 0 else None
+    except (OSError, ValueError):
+        pass
+
+    return None
+
+
+def _is_stale_council_process(pid):
+    """Check if PID is an LLM Council process (app.py in its cmdline)."""
+    try:
+        cmdline_path = f"/proc/{pid}/cmdline"
+        with open(cmdline_path, "rb") as f:
+            cmdline = f.read().decode("utf-8", errors="replace")
+        return "app.py" in cmdline
+    except OSError:
+        return False
+
+
+def ensure_port_available(port):
+    """Check that the port is free; auto-kill stale council processes or exit with a clear error."""
+    import socket
+    import signal
+    import sys
+    import time
+
+    # Quick check: try to bind
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(("0.0.0.0", port))
+        return  # Port is free
+    except OSError:
+        pass  # Port occupied — investigate
+
+    pid = _find_port_pid(port)
+
+    if pid is None:
+        print(f"ERROR: Port {port} is in use but could not identify the process.")
+        print(f"Try: lsof -ti :{port}  or  ss -tlnp 'sport = :{port}'")
+        sys.exit(1)
+
+    if pid == os.getpid():
+        return  # It's us (shouldn't happen, but be safe)
+
+    if _is_stale_council_process(pid):
+        print(f"Port {port} occupied by stale LLM Council process (PID {pid}). Cleaning up...")
+        try:
+            os.kill(pid, signal.SIGTERM)
+            # Wait up to 5 seconds for graceful exit
+            for _ in range(50):
+                time.sleep(0.1)
+                try:
+                    os.kill(pid, 0)  # Check if still alive
+                except OSError:
+                    break
+            else:
+                # Still alive after 5s — force kill
+                print(f"  PID {pid} did not exit after SIGTERM, sending SIGKILL...")
+                os.kill(pid, signal.SIGKILL)
+                time.sleep(0.5)
+        except OSError:
+            pass  # Already gone
+
+        # Verify port is now free
+        time.sleep(0.5)
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("0.0.0.0", port))
+            print(f"  Port {port} is now free. Continuing startup.")
+            return
+        except OSError:
+            print(f"ERROR: Port {port} still occupied after killing PID {pid}.")
+            sys.exit(1)
+    else:
+        # Another process owns the port — don't touch it
+        proc_name = "unknown"
+        try:
+            with open(f"/proc/{pid}/comm") as f:
+                proc_name = f.read().strip()
+        except OSError:
+            pass
+        print(f"ERROR: Port {port} is in use by another process (PID {pid}, {proc_name}).")
+        print(f"Either stop that process or set a different port: PORT=8080 python app.py")
+        sys.exit(1)
+
+
 # --- Entry Point ---
 
 if __name__ == "__main__":
@@ -1957,6 +2072,9 @@ if __name__ == "__main__":
 
     # --- Port Configuration ---
     server_port = int(os.environ.get("PORT", "7861"))
+
+    # --- Port Conflict Detection ---
+    ensure_port_available(server_port)
 
     # Check for required authentication credentials
     auth_user = os.environ.get("LLM_COUNCIL_USER")

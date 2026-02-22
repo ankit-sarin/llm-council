@@ -2,6 +2,8 @@
 Description=LLM Council - Multi-model debate system
 After=network.target ollama.service
 Wants=ollama.service
+StartLimitBurst=5
+StartLimitIntervalSec=60
 
 [Service]
 Type=simple
@@ -13,7 +15,7 @@ Environment="VIRTUAL_ENV=/home/ankitsarin/projects/llm-council/venv"
 EnvironmentFile=/home/ankitsarin/projects/llm-council/.env
 ExecStart=/home/ankitsarin/projects/llm-council/venv/bin/python app.py
 Restart=always
-RestartSec=5
+RestartSec=10
 StandardOutput=append:/home/ankitsarin/projects/llm-council/logs/council.log
 StandardError=append:/home/ankitsarin/projects/llm-council/logs/council.log
 
