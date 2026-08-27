@@ -1,0 +1,391 @@
+<section class="module" id="module-5" style="background: var(--color-bg-warm)">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number" style="color: var(--color-accent); opacity: 0.15">05</span>
+      <h1 class="module-title">Anonymous peer review and consensus</h1>
+      <p class="module-subtitle">How three models grade each other behind a curtain — and how that grade becomes a number you can trust.</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- ===================== SCREEN 1: THE BLIND GRANT REVIEW ===================== -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The blind grant review</h2>
+        <p>Imagine three scientists each submit a research proposal. The reviewers see all three — but the names have been stripped off. They are <span class="term" data-definition="Anonymization means removing identifying information from data so people cannot tell who said what. Used in scientific peer review, surveys, and AI evaluation to fight bias.">anonymized</span> as Proposal A, B, and C.</p>
+        <p>Each reviewer grades the <em>other</em> proposals on three things. Then a panel chair looks at how aligned the reviewers were. Tight agreement means strong consensus; scattered scores mean the topic is genuinely contested.</p>
+
+        <div class="pattern-cards" style="margin-top: var(--space-8)">
+          <div class="pattern-card" style="border-top: 3px solid var(--color-error)">
+            <div class="pattern-icon" style="background: var(--color-error)">!</div>
+            <h4 class="pattern-title">WITH names (biased)</h4>
+            <p class="pattern-desc">Reviewers see who wrote each proposal. They might favor a famous lab, a familiar style, or worse — their own answer. The score reflects the source, not the substance.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-info)">
+            <div class="pattern-icon" style="background: var(--color-info)">A</div>
+            <h4 class="pattern-title">WITHOUT names (fair)</h4>
+            <p class="pattern-desc">Reviewers see Proposal A, B, C. With no way to recognize a friend or a rival, they have to judge the content itself. This is exactly what scientific journals do — they call it <span class="term" data-definition="Blind review means evaluators cannot see the identity of who they are judging. Double-blind hides both authors and reviewers from each other. The point is to remove bias.">double-blind review</span>.</p>
+          </div>
+        </div>
+
+        <p style="margin-top: var(--space-8)">After Stage 1 finishes, each model has written its answer. Then something strange happens — every model gets to read everyone <em>else's</em> answers, but with the names stripped off, and is asked to grade them. The math on those grades becomes the <strong>consensus score</strong> you see at the top of the final answer.</p>
+      </section>
+
+      <!-- ===================== SCREEN 2: HIDING THE NAMES (SNIPPET A) ===================== -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Hiding the names</h2>
+        <p>Here is the function that turns "Llama said X, Qwen said Y, Gemma said Z" into the curtain-up version: "Response A, Response B, Response C." It also drops the reviewer's own answer so nobody can grade themselves.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+            <pre><code><span class="code-line"><span class="code-keyword">def</span> <span class="code-function">_anonymize_responses</span>(responses: <span class="code-keyword">dict</span>[<span class="code-keyword">str</span>, ModelResponse], exclude_model: <span class="code-keyword">str</span>) -> <span class="code-keyword">tuple</span>[<span class="code-keyword">str</span>, <span class="code-keyword">dict</span>[<span class="code-keyword">str</span>, <span class="code-keyword">str</span>]]:</span>
+<span class="code-line">    <span class="code-string">"""</span></span>
+<span class="code-line"><span class="code-string">    Create anonymized response text for peer review.</span></span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-string">    Returns:</span></span>
+<span class="code-line"><span class="code-string">        Tuple of (formatted_text, mapping) where mapping is {"A": model_name, ...}</span></span>
+<span class="code-line"><span class="code-string">    """</span></span>
+<span class="code-line">    <span class="code-comment"># Filter out the reviewer's own response</span></span>
+<span class="code-line">    other_responses = {k: v <span class="code-keyword">for</span> k, v <span class="code-keyword">in</span> responses.items() <span class="code-keyword">if</span> k != exclude_model}</span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-comment"># Create mapping: letter -> model name</span></span>
+<span class="code-line">    mapping = {}</span>
+<span class="code-line">    formatted_parts = []</span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-keyword">for</span> i, (model, response) <span class="code-keyword">in</span> <span class="code-function">enumerate</span>(other_responses.items()):</span>
+<span class="code-line">        letter = <span class="code-function">chr</span>(<span class="code-number">65</span> + i)  <span class="code-comment"># A, B, C, ...</span></span>
+<span class="code-line">        mapping[letter] = model</span>
+<span class="code-line">        formatted_parts.append(<span class="code-string">f"=== RESPONSE {letter} ===\n{response.content}\n"</span>)</span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-keyword">return</span> <span class="code-string">"\n"</span>.join(formatted_parts), mapping</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Define a helper that takes all the model answers plus the name of the reviewer who is about to grade.</p>
+              <p class="tl">It will hand back two things — the anonymized text the reviewer will see, and a private cheat-sheet that maps the letters back to real model names later.</p>
+              <p class="tl">First, drop the reviewer's own answer from the pile. No self-grading allowed — that would defeat the whole point.</p>
+              <p class="tl">Set up an empty cheat-sheet and an empty buffer to hold the formatted text.</p>
+              <p class="tl">Walk through the remaining answers one at a time, with a counter so we can hand out letters in order.</p>
+              <p class="tl">Turn the counter into a letter — 0 becomes A, 1 becomes B, and so on. Save the letter-to-model link in the cheat-sheet.</p>
+              <p class="tl">Stamp the answer with a big visible header like "=== RESPONSE A ===" so the reviewer sees a clean labeled block.</p>
+              <p class="tl">Hand back the joined-up text plus the private mapping. The reviewer gets the curtain-down version; we keep the key.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== SCREEN 3: THE REVIEW PROMPT (SNIPPET B) ===================== -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">What we ask the reviewer to do</h2>
+        <p>The curtain is up. Now we send the reviewer a <span class="term" data-definition="A prompt is the instruction you give an LLM. The wording, structure, and examples in the prompt heavily influence the quality and format of the response.">prompt</span> that explains the job: score every <em>other</em> response on three <span class="term" data-definition="A criterion (plural: criteria) is one specific dimension you grade something on. Here the council uses three separate criteria so reviewers cannot hide behind a single fuzzy number.">criteria</span>, on a 1-10 scale, in a strict format we can parse later.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+            <pre><code><span class="code-line">prompt = <span class="code-string">f"""You are reviewing responses from other council members on the following question.</span></span>
+<span class="code-line"><span class="code-string">Your task is to evaluate each response and rank them.</span></span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-string">ORIGINAL QUESTION: {question}</span></span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-string">RESPONSES TO REVIEW:</span></span>
+<span class="code-line"><span class="code-string">{anonymized}</span></span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-string">Please evaluate each response on three criteria (1-10 scale):</span></span>
+<span class="code-line"><span class="code-string">- ACCURACY: How factually correct is the response?</span></span>
+<span class="code-line"><span class="code-string">- INSIGHT: How deep and valuable are the insights?</span></span>
+<span class="code-line"><span class="code-string">- COMPLETENESS: How thoroughly does it address the question?</span></span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-string">Provide your evaluation in this exact format:</span></span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-string">RANKINGS:</span></span>
+<span class="code-line"><span class="code-string">Response A: Accuracy=X, Insight=X, Completeness=X</span></span>
+<span class="code-line"><span class="code-string">Response B: Accuracy=X, Insight=X, Completeness=X</span></span>
+<span class="code-line"><span class="code-string">[continue for all responses]</span></span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-string">ANALYSIS:</span></span>
+<span class="code-line"><span class="code-string">[2-3 sentences maximum. Focus only on key differentiators between responses.]"""</span></span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Tell the model up front what role it is playing: a council reviewer with a job to do.</p>
+              <p class="tl">Remind it of the original question so it has the context to judge against.</p>
+              <p class="tl">Drop in the anonymized responses — the curtain-down text we built in the last screen.</p>
+              <p class="tl">Spell out the three things it should score, with a definition for each so all reviewers grade the same way.</p>
+              <p class="tl">Tell it exactly what shape the answer should take. The strict format is on purpose.</p>
+              <p class="tl">Give it a template line for every response: a letter, then three labeled scores.</p>
+              <p class="tl">Finally, ask for a short written analysis — but cap it at 2-3 sentences so reviewers stay focused.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info" style="margin-top: var(--space-8)">
+          <div class="callout-icon">i</div>
+          <div class="callout-content">
+            <strong class="callout-title">Why the prompt is so strict about format</strong>
+            <p>Asking the LLM to output in <em>exactly</em> <code>Accuracy=X, Insight=X, Completeness=X</code> format makes the response <span class="term" data-definition="To parse means to read text and pull specific pieces of information out of it in a structured way. A program that turns a sentence into named fields is a parser.">parseable</span>. Free-text praise is useless to a <span class="term" data-definition="A regex (regular expression) is a tiny pattern language for matching text. It is how programs find phone numbers, email addresses, or in this case Accuracy=8 inside a paragraph of model output.">regex</span>. This is a basic but critical <span class="term" data-definition="Prompt engineering is the craft of writing LLM instructions in a way that reliably produces the output shape you need. It is half wording, half formatting.">prompt engineering</span> pattern: when you want <span class="term" data-definition="Structured output means the LLM returns data in a predictable shape (like JSON or a strict template) instead of free-flowing prose. It is what makes LLM output usable in real software.">structured output</span> from an LLM, <em>tell it exactly what shape you want</em>.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== SCREEN 4: GROUP CHAT — THE ACTUAL CONVERSATION ===================== -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The actual conversation, animated</h2>
+        <p>Here is what the <span class="term" data-definition="In scientific publishing, peer review means experts in the same field check a paper before publication. The council uses the same idea: each model grades the others to catch errors and surface disagreement.">peer review</span> stage actually looks like behind the scenes. Three models score each other anonymously, and the engine flags any wide disagreement.</p>
+
+        <div class="chat-window" id="chat-module5">
+          <div class="chat-messages">
+
+            <div class="chat-message" data-msg="0" data-sender="engine" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">Engine</span>
+                <p>Stage 1 is done. Here are anonymized Responses A, B, and C. Each of you, score every response you did not write on Accuracy, Insight, and Completeness. Use the exact template.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="1" data-sender="qwen" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">Q</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">Qwen 2.5 32B</span>
+                <p>RANKINGS:<br>Response A: Accuracy=8, Insight=7, Completeness=9<br>Response B: Accuracy=6, Insight=8, Completeness=7</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="2" data-sender="gemma" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-3)">G</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-3)">Gemma 2 27B</span>
+                <p>RANKINGS:<br>Response A: Accuracy=8, Insight=7, Completeness=8<br>Response B: Accuracy=7, Insight=8, Completeness=8</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="3" data-sender="mistral" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-4)">M</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-4)">Mistral 7B</span>
+                <p>RANKINGS:<br>Response A: Accuracy=2, Insight=3, Completeness=4<br>Response B: Accuracy=9, Insight=8, Completeness=9</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="4" data-sender="engine" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">Engine</span>
+                <p>Running the regex parser on each reviewer block. Pulling out the numbers behind Accuracy=, Insight=, and Completeness= for each response letter.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="5" data-sender="engine" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">Engine</span>
+                <p>Response A Accuracy scores: 8, 8, 2. Two reviewers agree closely around 8. One reviewer scored A way lower at 2. That spread is huge.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="6" data-sender="engine" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">Engine</span>
+                <p>Variance on Response A Accuracy is roughly 12 — well above the threshold of 4. Flagging this as a real disagreement and adding it to the consensus report.</p>
+              </div>
+            </div>
+
+            <div class="chat-message" data-msg="7" data-sender="engine" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-1)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-1)">Engine</span>
+                <p>Averaging the spread across every score I parsed, then flipping the number so low spread maps to a high consensus value. Final consensus score: 42 out of 100 — medium-low. Handing the package to the chairman next.</p>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="chat-typing" style="display:none">
+            <div class="chat-avatar">?</div>
+            <div class="chat-typing-dots">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+            </div>
+          </div>
+
+          <div class="chat-controls">
+            <button class="btn chat-next-btn">Next Message</button>
+            <button class="btn chat-all-btn">Play All</button>
+            <button class="btn chat-reset-btn">Replay</button>
+            <span class="chat-progress"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== SCREEN 5: THE VARIANCE MATH (SNIPPET D) + QUIZ ===================== -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Turning scores into a 0-100 consensus score</h2>
+        <p>For each thing the reviewers scored, collect all the scores given. Measure how spread out they are. Average the spread across everything. Then flip the number so low spread becomes a high consensus value.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+            <pre><code><span class="code-line"><span class="code-comment"># Calculate variance for each response on each criterion</span></span>
+<span class="code-line">variances = []</span>
+<span class="code-line">disagreement_details = []</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Get all response letters that were reviewed</span></span>
+<span class="code-line">all_letters = <span class="code-function">set</span>()</span>
+<span class="code-line"><span class="code-keyword">for</span> reviewer_scores <span class="code-keyword">in</span> all_scores.values():</span>
+<span class="code-line">    all_letters.update(reviewer_scores.keys())</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-keyword">for</span> letter <span class="code-keyword">in</span> <span class="code-function">sorted</span>(all_letters):</span>
+<span class="code-line">    <span class="code-keyword">for</span> criterion <span class="code-keyword">in</span> [<span class="code-string">"accuracy"</span>, <span class="code-string">"insight"</span>, <span class="code-string">"completeness"</span>]:</span>
+<span class="code-line">        <span class="code-comment"># Collect scores from all reviewers for this response+criterion</span></span>
+<span class="code-line">        criterion_scores = []</span>
+<span class="code-line">        <span class="code-keyword">for</span> reviewer, reviewer_scores <span class="code-keyword">in</span> all_scores.items():</span>
+<span class="code-line">            <span class="code-keyword">if</span> letter <span class="code-keyword">in</span> reviewer_scores <span class="code-keyword">and</span> criterion <span class="code-keyword">in</span> reviewer_scores[letter]:</span>
+<span class="code-line">                criterion_scores.append(reviewer_scores[letter][criterion])</span>
+<span class="code-line"></span>
+<span class="code-line">        <span class="code-keyword">if</span> <span class="code-function">len</span>(criterion_scores) >= <span class="code-number">2</span>:</span>
+<span class="code-line">            variance = statistics.variance(criterion_scores)</span>
+<span class="code-line">            variances.append(variance)</span>
+<span class="code-line"></span>
+<span class="code-line">            <span class="code-comment"># Track significant disagreements (variance > 4 means scores differ by ~2+ points)</span></span>
+<span class="code-line">            <span class="code-keyword">if</span> variance > <span class="code-number">4</span>:</span>
+<span class="code-line">                disagreement_details.append(</span>
+<span class="code-line">                    <span class="code-string">f"{criterion.capitalize()} of {model_name} (variance: {variance:.1f})"</span></span>
+<span class="code-line">                )</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Average variance across all scores</span></span>
+<span class="code-line">avg_variance = statistics.mean(variances)</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Convert to 0-100 score (inverse: low variance = high score)</span></span>
+<span class="code-line"><span class="code-comment"># Max reasonable variance is ~20 (scores ranging 1-10)</span></span>
+<span class="code-line">consensus_score = <span class="code-function">max</span>(<span class="code-number">0</span>, <span class="code-function">min</span>(<span class="code-number">100</span>, <span class="code-number">100</span> - (avg_variance * <span class="code-number">5</span>)))</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Set up two empty buckets — one to hold every spread number we calculate, one to hold human-readable notes about big disagreements.</p>
+              <p class="tl">Build a list of every response letter (A, B, C...) that any reviewer actually scored.</p>
+              <p class="tl">Loop through each response letter in alphabetical order — we will visit A, then B, then C.</p>
+              <p class="tl">For every letter, walk through the three criteria one by one: accuracy, then insight, then completeness.</p>
+              <p class="tl">Gather all the scores reviewers gave for this specific letter-and-criterion combo into one small list.</p>
+              <p class="tl">Only continue if at least two reviewers actually scored it — you need two numbers to measure disagreement.</p>
+              <p class="tl">Compute the <span class="term" data-definition="Variance is the standard way statisticians measure how spread out a set of numbers is. Two identical numbers have variance 0. Numbers that are far apart have high variance.">variance</span> — the formal <span class="term" data-definition="Statistics is the branch of math that turns lots of individual numbers into one summary number, like an average or a measure of spread. The council uses it to turn many reviewer scores into one consensus number.">statistics</span> measure of spread. Add it to our bucket.</p>
+              <p class="tl">If the variance is above 4 (scores differ by 2+ points), this is a real disagreement — log a human-readable note about it.</p>
+              <p class="tl">Once we have visited every letter and criterion, average all the spreads into one number — the typical disagreement level.</p>
+              <p class="tl">Flip it: low average spread should mean high consensus. Multiply the spread by 5, subtract from 100, and clamp between 0 and 100.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent" style="margin-top: var(--space-8)">
+          <div class="callout-icon">!</div>
+          <div class="callout-content">
+            <strong class="callout-title">Variance is how engineers measure disagreement</strong>
+            <p>It is the squared average distance from the <span class="term" data-definition="The mean is the simple average — add all the numbers up and divide by how many there are.">mean</span> (the average). Two reviewers giving 5 and 5 produce a variance of 0. Two reviewers giving 1 and 10 produce a variance of 40.5. Anytime you see a "<span class="term" data-definition="In software, confidence usually means a numeric estimate of how sure the system is about its answer. Behind almost every confidence number is some form of variance or standard deviation.">confidence</span>" or "agreement" number in software, there is a variance (or its cousin, standard deviation) under the hood.</p>
+          </div>
+        </div>
+
+        <h2 class="screen-heading" style="margin-top: var(--space-12)">Check your understanding</h2>
+
+        <div class="quiz-container" id="quiz-module5">
+
+          <div class="quiz-question-block"
+               data-correct="option-a"
+               data-explanation-right="Exactly. Removing names forces reviewers to judge content, not source. This is the same reason scientific peer review is double-blind — it neutralizes bias from prestige, familiarity, or self-interest."
+               data-explanation-wrong="Not quite. The amount of text sent is roughly the same with or without names, and modern LLMs absolutely read names if you show them. The real reason is to remove bias.">
+            <h3 class="quiz-question">Why are responses anonymized before review?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>So reviewers cannot favor their own team or recognize a model they know — same reason scientific peer review is double-blind.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>To save bandwidth on the network call.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Because the models cannot read names anyway.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="option-a"
+               data-explanation-right="Right. Identical scores have variance = 0 (perfect consensus). Response B scores spread from 3 to 10 — that is high variance, meaning reviewers genuinely disagree about whether B is accurate."
+               data-explanation-wrong="Take another look. The key idea is that variance measures spread. Identical numbers have zero spread, so any time all reviewers agree exactly, consensus is perfect on that criterion.">
+            <h3 class="quiz-question">All three reviewers gave Response A's Accuracy a 9. They gave Response B's Accuracy 3, 7, and 10. Which has higher consensus on Accuracy, and why?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Response A — identical scores mean variance is 0, which is perfect consensus on that criterion.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Response B — the average score is higher.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>They have equal consensus because both got at least one high score.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="option-b"
+               data-explanation-right="Correct. Low consensus means the topic is genuinely contested. The chairman is told to surface those disagreements and present multiple perspectives instead of forcing artificial agreement — there is a special branch in the chairman prompt for this case."
+               data-explanation-wrong="Not quite. A low consensus score is a signal that the reviewers really disagree. Forcing a confident single answer on a contested topic would hide useful information from the user.">
+            <h3 class="quiz-question">The final consensus score is 32 out of 100. The chairman should...</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Pick the highest-scoring response and present it confidently as the answer.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Emphasize the disagreement and present multiple perspectives instead of forcing artificial agreement.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Throw away the responses and start over with different models.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="option-c"
+               data-explanation-right="Exactly — three places. The review prompt needs the new criterion listed and added to the template. The score parser regex needs to capture Clarity. And the variance loop iterates over the list ['accuracy', 'insight', 'completeness'] — Clarity has to be added there too, or the math will silently ignore it."
+               data-explanation-wrong="Closer look needed. Trace the data: the criterion has to be asked for in the prompt, parsed out of the reply text, AND included in the variance calculation. Miss any one of those and either the score never gets captured or it never gets counted.">
+            <h3 class="quiz-question">You want to add a 4th criterion called "Clarity" to the reviews. Which set of changes is required for the consensus math to actually use it?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Just add Clarity to the review prompt — the parser and math will pick it up automatically.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Just extend the regex in _parse_review_scores to capture Clarity.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Update the review prompt, extend the regex in _parse_review_scores, and add "clarity" to the criteria list the variance loop iterates over.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module5')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module5')">Try Again</button>
+        </div>
+
+      </section>
+
+    </div>
+  </div>
+</section>

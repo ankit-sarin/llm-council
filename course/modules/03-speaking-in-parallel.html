@@ -1,0 +1,407 @@
+<section class="module" id="module-3" style="background: var(--color-bg-warm)">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">03</span>
+      <h1 class="module-title">Speaking in parallel</h1>
+      <p class="module-subtitle">How three models stream tokens at the same time without crashing into each other.</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- ============================================================ -->
+      <!-- SCREEN 1: The line-cook kitchen metaphor -->
+      <!-- ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The line-cook kitchen</h2>
+        <p>Imagine ordering pancakes, eggs, and bacon at a diner. One cook making all three in sequence is slow. Three cooks each grabbing one item at the same time is fast.</p>
+        <p>That is what Module 3 is about. The council does not interview its models one after another. It runs them <span class="term" data-definition="Doing several things at the same time instead of one after another. In code, parallelism is the difference between a 3-minute wait and a 30-second wait when you have three independent jobs.">in parallel</span> and pipes their output to you live, one <span class="term" data-definition="A token is a small chunk of text an AI produces, roughly a word fragment. Models output one token at a time, so streaming a response means watching tokens appear like a typewriter.">token</span> at a time.</p>
+
+        <div class="pattern-cards" style="margin-top: var(--space-8)">
+          <div class="pattern-card" style="border-top: 3px solid var(--color-error)">
+            <div class="pattern-icon" style="background: var(--color-error)">1</div>
+            <h4 class="pattern-title">One cook, three orders</h4>
+            <p class="pattern-desc">Pancakes finish. Then eggs start. Then bacon starts. Breakfast takes 30 minutes. This is what most simple Python code does.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-info)">
+            <div class="pattern-icon" style="background: var(--color-info)">3</div>
+            <h4 class="pattern-title">Three cooks, one head chef</h4>
+            <p class="pattern-desc">Every order starts at the same time. The head chef coordinates so nobody fights over the same pan. Breakfast in 10 minutes.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-success)">
+            <div class="pattern-icon" style="background: var(--color-success)">T</div>
+            <h4 class="pattern-title">Plates by the bite</h4>
+            <p class="pattern-desc">Instead of waiting for everything to finish, each cook slides food to you as soon as it is ready. You eat while you wait. That is streaming.</p>
+          </div>
+        </div>
+
+        <div class="callout callout-info" style="margin-top: var(--space-8)">
+          <div class="callout-icon">i</div>
+          <div class="callout-content">
+            <strong class="callout-title">Why this matters when you direct an AI</strong>
+            <p>When you tell an AI coding tool "make this faster" and it says "let us add <span class="term" data-definition="async (short for asynchronous) is a Python style where slow operations like network calls do not freeze the rest of the program. The code looks normal but the runtime can juggle many waits at once.">async</span>" or "stream the response," this module is what those words mean. If your AI implements streaming and the answer still appears all at once, the implementation is wrong.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SCREEN 2: What async actually means + Snippet A -->
+      <!-- ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">What async actually means</h2>
+        <p>Python normally does one thing at a time. <span class="term" data-definition="asyncio is Python&apos;s built-in library for running many slow operations at the same time without using multiple CPU cores. Think of it as the head chef coordinating who is waiting and who is ready to act.">asyncio</span> is a library that lets it juggle many slow waits at once. The trick: a function marked async can pause itself while waiting on the network, freeing the runtime to start other work.</p>
+
+        <div class="flow-animation" data-steps='[
+          {"highlight":"flow-actor-1","label":"The head chef receives three model jobs"},
+          {"highlight":"flow-actor-1","label":"Each job is wrapped as a task and handed off at the same instant","packet":true,"from":"actor-1","to":"actor-2"},
+          {"highlight":"flow-actor-2","label":"Qwen, Gemma, and Mistral all start streaming tokens simultaneously"},
+          {"highlight":"flow-actor-2","label":"gather waits until every task is finished, then returns control"},
+          {"highlight":"flow-actor-3","label":"Stage 1 complete — three responses ready in roughly the time of the slowest model"}
+        ]'>
+          <div class="flow-actors">
+            <div class="flow-actor" id="flow-actor-1">
+              <div class="flow-actor-icon">H</div>
+              <span>Head chef (await)</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-2">
+              <div class="flow-actor-icon">3x</div>
+              <span>Three tasks</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-3">
+              <div class="flow-actor-icon">OK</div>
+              <span>gather() returns</span>
+            </div>
+          </div>
+          <div class="flow-packet" id="flow-packet"></div>
+          <div class="flow-step-label" id="flow-label">Click Next Step to watch a parallel launch</div>
+          <div class="flow-controls">
+            <button class="btn flow-next-btn">Next Step</button>
+            <button class="btn flow-reset-btn">Restart</button>
+            <span class="flow-progress"></span>
+          </div>
+        </div>
+
+        <h3 style="margin-top: var(--space-10)">The actual code (council.py, lines 423-426)</h3>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line"><span class="code-comment"># Run all models in this batch concurrently</span></span>
+<span class="code-line">tasks = [asyncio.create_task(run_model(m)) <span class="code-keyword">for</span> m <span class="code-keyword">in</span> batch]</span>
+<span class="code-line"><span class="code-keyword">await</span> asyncio.gather(*tasks)</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">A note for our future selves: we are about to fire off every model at the same time, not one by one.</p>
+              <p class="tl">For each model in this batch, we wrap its work in a <span class="term" data-definition="A task is a unit of async work scheduled to run when the event loop has a chance. Creating a task says start this now, do not wait for it yet.">task</span> using <code>asyncio.create_task</code>. The instant a task is created, it starts running — Qwen, Gemma, and Mistral all kick off together.</p>
+              <p class="tl">Then we say <span class="term" data-definition="await is the Python keyword that means pause this function until the awaited thing is done, but let other async work keep running in the meantime.">await</span> <code>asyncio.gather(*tasks)</code> — translation: wait here until every single task in the list has finished, then continue. <code>gather</code> is the head chef calling "all hands up when you are done."</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="icon-rows" style="margin-top: var(--space-8)">
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-actor-2)">async</div>
+            <div>
+              <strong>The async keyword</strong>
+              <p>Marks a function as pause-able. Without it, Python cannot juggle this work — it just blocks.</p>
+            </div>
+          </div>
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-actor-3)">co</div>
+            <div>
+              <strong><span class="term" data-definition="A coroutine is what an async function returns when you call it — a pause-able job that can be scheduled. Like a recipe card waiting for a cook to pick it up.">Coroutine</span></strong>
+              <p>The thing an async function produces. A recipe. <code>create_task</code> hands the recipe to a cook so they actually start cooking.</p>
+            </div>
+          </div>
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-actor-5)">L</div>
+            <div>
+              <strong><span class="term" data-definition="The event loop is the engine inside asyncio that decides which paused coroutine to resume next. It is the head chef walking the kitchen, checking who is ready to move.">Event loop</span></strong>
+              <p>The traffic cop of asyncio. While one task waits on a slow model, the loop runs the other tasks. Nothing is ever truly idle.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SCREEN 3: Streaming, token by token + Snippet B -->
+      <!-- ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Streaming, token by token</h2>
+        <p>Parallel makes things fast. <span class="term" data-definition="Streaming means the server sends the response in small pieces as they are generated, instead of one big blob at the end. You see text appear like a typewriter.">Streaming</span> makes them feel fast. Instead of "wait 30 seconds, then get all the text," we get every <span class="term" data-definition="A chunk is one streamed piece of data from a server. For LLMs, each chunk usually carries one token (a word fragment) plus some metadata.">chunk</span> the model produces and forward it to the UI immediately.</p>
+        <p>There is a complication. <code>ollama.chat()</code> is <span class="term" data-definition="Synchronous code runs straight through and freezes the caller until it finishes. The opposite of async. A synchronous library does not know how to pause politely.">synchronous</span> — it <span class="term" data-definition="Blocking code holds up everything else while it waits. A blocking network call freezes the whole program until the response arrives.">blocks</span>. We want async. So we use a classic bridge: a worker <span class="term" data-definition="A thread is a separate line of execution inside the same program. Threads can run blocking work without freezing the main async loop.">thread</span> does the blocking work, and a <span class="term" data-definition="A queue is a thread-safe inbox. One side puts items in, the other side pulls them out — perfect for ferrying data between a thread and the async loop.">queue</span> ferries tokens out to the async loop.</p>
+
+        <h3 style="margin-top: var(--space-8)">The streaming bridge (council.py, lines 158-176)</h3>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line"><span class="code-keyword">def</span> <span class="code-function">run_stream</span>():</span>
+<span class="code-line">    <span class="code-string">"""Stream tokens from Ollama. Always signals 'done' via finally."""</span></span>
+<span class="code-line">    error_msg = <span class="code-keyword">None</span></span>
+<span class="code-line">    <span class="code-keyword">try</span>:</span>
+<span class="code-line">        <span class="code-keyword">for</span> chunk <span class="code-keyword">in</span> ollama.chat(</span>
+<span class="code-line">            model=model,</span>
+<span class="code-line">            messages=[{<span class="code-string">"role"</span>: <span class="code-string">"user"</span>, <span class="code-string">"content"</span>: prompt}],</span>
+<span class="code-line">            stream=<span class="code-keyword">True</span></span>
+<span class="code-line">        ):</span>
+<span class="code-line">            token = chunk.get(<span class="code-string">"message"</span>, {}).get(<span class="code-string">"content"</span>, <span class="code-string">""</span>)</span>
+<span class="code-line">            <span class="code-keyword">if</span> token:  <span class="code-comment"># Only enqueue non-empty tokens</span></span>
+<span class="code-line">                token_queue.put((<span class="code-string">"token"</span>, token))</span>
+<span class="code-line">    <span class="code-keyword">except</span> Exception <span class="code-keyword">as</span> e:</span>
+<span class="code-line">        error_msg = <span class="code-function">str</span>(e)</span>
+<span class="code-line">        token_queue.put((<span class="code-string">"error"</span>, error_msg))</span>
+<span class="code-line">    <span class="code-keyword">finally</span>:</span>
+<span class="code-line">        <span class="code-comment"># Always signal completion so the consumer loop can exit</span></span>
+<span class="code-line">        token_queue.put((<span class="code-string">"done"</span>, <span class="code-keyword">None</span>))</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Define the worker function that will run inside a thread. Its only job is to pull tokens from Ollama and drop them on the queue.</p>
+              <p class="tl">Set up an empty error slot so we can remember any crash that happens.</p>
+              <p class="tl">Begin a <span class="term" data-definition="A try block is Python&apos;s way of saying try this code, but be ready to catch problems. Anything that goes wrong inside is handled by the except branch.">try</span> block — wrap the risky network work so a crash does not kill the whole app.</p>
+              <p class="tl">Call <code>ollama.chat</code> with <code>stream=True</code>. This returns a <span class="term" data-definition="A generator is a Python object that produces values one at a time, on demand. Looping over it gives you each value as it is ready — perfect for streaming.">generator</span> — we loop over it and each iteration is one new chunk of text from the model.</p>
+              <p class="tl">For each chunk, dig out the actual text. <code>chunk.get("message", {}).get("content", "")</code> means: be tolerant — if any field is missing, give me an empty string instead of crashing.</p>
+              <p class="tl">If the token has real text in it, push it onto the queue as <code>("token", token)</code>. The async side is reading this queue and forwarding each piece to the browser.</p>
+              <p class="tl">If anything explodes — network drop, model crash, bad response — catch the <span class="term" data-definition="An exception is Python&apos;s name for an error that interrupts normal flow. You can catch exceptions with try/except so the program keeps running instead of dying.">exception</span> and put an <code>("error", message)</code> on the queue so the UI can show what went wrong.</p>
+              <p class="tl">The magic line. <span class="term" data-definition="A finally block runs no matter what — success, exception, return, anything. It is the only Python construct that guarantees cleanup code executes.">finally</span> guarantees that we always push <code>("done", None)</code> onto the queue, even after an error. The async loop on the other side is waiting for that signal to stop reading. Without finally, one missed code path means the UI hangs forever.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info" style="margin-top: var(--space-8)">
+          <div class="callout-icon">i</div>
+          <div class="callout-content">
+            <strong class="callout-title">Why a thread <em>and</em> asyncio?</strong>
+            <p>asyncio is great when libraries are designed for it. <code>ollama.chat()</code> is not — it blocks. The thread is the airlock: the thread does the blocking work, the queue ferries tokens out, the async loop stays responsive. You can also imagine the thread as a <span class="term" data-definition="A daemon thread runs in the background and is automatically killed when the main program exits. Useful for workers you do not want to outlive the app.">daemon thread</span> so it never outlives the app.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SCREEN 4: What can go wrong + Snippets C & D -->
+      <!-- ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">What can go wrong, and how the code defends</h2>
+        <p>Two failure modes haunt every streaming system: the network gets <em>too slow</em>, or it gets <em>stuck entirely</em>. A third — the user just wants to cancel — also needs a clean answer.</p>
+
+        <div class="pattern-cards" style="margin-top: var(--space-6)">
+          <div class="pattern-card" style="border-top: 3px solid var(--color-error)">
+            <div class="pattern-icon" style="background: var(--color-error)">10m</div>
+            <h4 class="pattern-title">Total <span class="term" data-definition="A timeout is a max waiting period. If the operation takes longer than the timeout, the code gives up and moves on. Without timeouts, slow services hang your app forever.">timeout</span></h4>
+            <p class="pattern-desc">If a model has been streaming for more than 10 minutes total, something is very wrong. Cut it off and mark the response as timed out.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-accent)">
+            <div class="pattern-icon" style="background: var(--color-accent)">2m</div>
+            <h4 class="pattern-title">Stall timeout</h4>
+            <p class="pattern-desc">If 2 minutes pass with no new tokens, the model is probably stuck. Cancel and keep whatever output already arrived.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-info)">
+            <div class="pattern-icon" style="background: var(--color-info)">STOP</div>
+            <h4 class="pattern-title">User-pressed Stop</h4>
+            <p class="pattern-desc">When the user clicks Stop Deliberation, a shared signal flips. Every model checks it on every token and exits gracefully.</p>
+          </div>
+        </div>
+
+        <h3 style="margin-top: var(--space-10)">Snippet C — the two safety timeouts (council.py, lines 107-108, 188-197)</h3>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line">STREAM_TOTAL_TIMEOUT_SECONDS = <span class="code-number">600</span>  <span class="code-comment"># 10 minutes max for any single model response</span></span>
+<span class="code-line">STREAM_STALL_TIMEOUT_SECONDS = <span class="code-number">120</span>  <span class="code-comment"># 2 minutes without receiving a token = stalled</span></span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># ... inside the consumer loop:</span></span>
+<span class="code-line"><span class="code-keyword">if</span> elapsed > STREAM_TOTAL_TIMEOUT_SECONDS:</span>
+<span class="code-line">    logger.warning(<span class="code-string">f"[{get_display_name(model)}] Total timeout ({STREAM_TOTAL_TIMEOUT_SECONDS}s) exceeded"</span>)</span>
+<span class="code-line">    timed_out = <span class="code-keyword">True</span></span>
+<span class="code-line">    <span class="code-keyword">break</span></span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-keyword">if</span> time_since_last_token > STREAM_STALL_TIMEOUT_SECONDS:</span>
+<span class="code-line">    logger.warning(<span class="code-string">f"[{get_display_name(model)}] Stall timeout ({STREAM_STALL_TIMEOUT_SECONDS}s) - no tokens received"</span>)</span>
+<span class="code-line">    timed_out = <span class="code-keyword">True</span></span>
+<span class="code-line">    <span class="code-keyword">break</span></span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Two constants at the top of the file: ten minutes is the absolute ceiling, two minutes of silence is the stall threshold. Named constants like these are how senior engineers leave readable knobs for future-them.</p>
+              <p class="tl">Inside the loop that reads tokens off the queue, we check the total elapsed time. If we have been at this longer than 10 minutes, log a warning, flag the response as timed out, and break out of the loop.</p>
+              <p class="tl">Separately, we check the gap since the last token. If two whole minutes have passed without anything arriving, the model has stalled. Same drill: log, flag, break. Whatever text we have so far is kept.</p>
+            </div>
+          </div>
+        </div>
+
+        <h3 style="margin-top: var(--space-10)">Snippet D — the Stop button (council.py, lines 199-203)</h3>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line"><span class="code-comment"># Check if stop was requested</span></span>
+<span class="code-line"><span class="code-keyword">if</span> stop_event <span class="code-keyword">is</span> <span class="code-keyword">not</span> <span class="code-keyword">None</span> <span class="code-keyword">and</span> stop_event.is_set():</span>
+<span class="code-line">    logger.info(<span class="code-string">f"[{get_display_name(model)}] Stop requested, halting stream"</span>)</span>
+<span class="code-line">    was_stopped = <span class="code-keyword">True</span></span>
+<span class="code-line">    <span class="code-keyword">break</span></span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">A friendly reminder of what we are about to do: peek at the stop signal.</p>
+              <p class="tl">If a stop_event was passed in (it is an <code>asyncio.Event</code>) and somebody has flipped it on, we know the user clicked Stop.</p>
+              <p class="tl">Log it, flag the response as user-stopped, and break out of the loop. The same event is passed to every model, so all three notice the click at roughly the same instant.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent" style="margin-top: var(--space-8)">
+          <div class="callout-icon">!</div>
+          <div class="callout-content">
+            <strong class="callout-title">Aha! moment</strong>
+            <p>The <code>finally:</code> block from Snippet B is one of the most underrated tools in defensive code. Whenever you are bridging two systems — like a synchronous library to an async caller — <em>always</em> put the "signal done" in <code>finally</code>. Otherwise one path forgets, and your code hangs forever. The same logic applies to a <span class="term" data-definition="A deadlock is when two pieces of code are each waiting for the other to do something, so nothing ever happens. Classic cause: a queue consumer waiting for a done signal that never arrives.">deadlock</span> or a <span class="term" data-definition="A race condition is a bug where the result depends on timing — which thread or task happens to win the race on a given run. Usually fixed with proper signaling or locks.">race condition</span> — most async bugs are really about who is waiting for whom.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SCREEN 5: Spot the bug + Quiz -->
+      <!-- ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Spot the bug</h2>
+        <p>Here is the streaming bridge again, but a critical line is missing. Click the line where the bug hides.</p>
+
+        <div class="bug-challenge">
+          <h3>Find the bug in this code:</h3>
+          <div class="bug-code">
+            <div class="bug-line" data-line="1" onclick="checkBugLine(this, false)">
+              <span class="line-num">1</span>
+              <code>def run_stream():</code>
+            </div>
+            <div class="bug-line" data-line="2" onclick="checkBugLine(this, false)">
+              <span class="line-num">2</span>
+              <code>    error_msg = None</code>
+            </div>
+            <div class="bug-line" data-line="3" onclick="checkBugLine(this, false)">
+              <span class="line-num">3</span>
+              <code>    try:</code>
+            </div>
+            <div class="bug-line" data-line="4" onclick="checkBugLine(this, false)">
+              <span class="line-num">4</span>
+              <code>        for chunk in ollama.chat(model=model, messages=[...], stream=True):</code>
+            </div>
+            <div class="bug-line bug-target" data-line="5" onclick="checkBugLine(this, true)">
+              <span class="line-num">5</span>
+              <code>            token_queue.put(("token", chunk.get("message", {}).get("content", "")))</code>
+            </div>
+            <div class="bug-line" data-line="6" onclick="checkBugLine(this, false)">
+              <span class="line-num">6</span>
+              <code>    except Exception as e:</code>
+            </div>
+            <div class="bug-line" data-line="7" onclick="checkBugLine(this, false)">
+              <span class="line-num">7</span>
+              <code>        error_msg = str(e)</code>
+            </div>
+            <div class="bug-line" data-line="8" onclick="checkBugLine(this, false)">
+              <span class="line-num">8</span>
+              <code>        token_queue.put(("error", error_msg))</code>
+            </div>
+          </div>
+          <div class="bug-feedback" id="bug-feedback"></div>
+        </div>
+
+        <div class="callout callout-warning" style="margin-top: var(--space-6)">
+          <div class="callout-icon">!</div>
+          <div class="callout-content">
+            <strong class="callout-title">The hidden trap</strong>
+            <p>The real bug is what is <em>missing</em> right after this region: there is no <code>finally:</code> block that always puts <code>("done", None)</code> on the queue. If <code>ollama.chat()</code> raises an exception type that is not caught, OR if the loop returns normally but forgets to signal "done," the consumer waiting on the queue would hang forever. The <code>finally</code> block guarantees the "done" signal <em>always</em> fires — no matter how the function exits. The line you clicked is where the missing safety net belongs.</p>
+          </div>
+        </div>
+
+        <h2 class="screen-heading" style="margin-top: var(--space-16)">Scenario quiz</h2>
+        <p>Three "what would you do" situations a vibe coder might run into.</p>
+
+        <div class="quiz-container" id="quiz-module3">
+
+          <div class="quiz-question-block"
+               data-correct="option-a"
+               data-explanation-right="Exactly. The 4th model pushed total VRAM over the GPU limit, so the engine switched from parallel to batched execution — now models run in waves instead of all at once. Module 4 covers the exact threshold and batching logic."
+               data-explanation-wrong="Not quite. asyncio scales just fine and Python is not the bottleneck here. The clue is the doubling — that is the signature of execution falling back to two batches instead of one parallel sweep.">
+            <h3 class="quiz-question">Q1. You add a 4th model to the council. You expect total time to be roughly the same as 3 models. You are shocked when it doubles. What is the likely cause?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The 4th model pushed total VRAM over the GPU limit, so execution fell back to batched mode — models now run in two waves.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Python is too slow for 4 simultaneous models.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>asyncio does not scale past 3 tasks.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="option-b"
+               data-explanation-right="Right. STREAM_STALL_TIMEOUT_SECONDS is set to 120 — after 2 minutes of no new tokens, the engine assumed the model is stuck, broke out of the loop, and kept whatever output had already arrived. The user did nothing because the safety net is automatic."
+               data-explanation-wrong="Close but not quite. The model did not finish (it was frozen at 70%), and the user did not press stop (the prompt says nothing happened). Look for the automatic safety net — the one that fires when no tokens arrive for a while.">
+            <h3 class="quiz-question">Q2. You are watching the deliberation tab and one column has been frozen at 70% for 3 minutes. Without you doing anything, the text shows "[Response timed out]." Why?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The model finished and the UI just took a while to update.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The stall timeout fired — no tokens arrived for 2 minutes, so the engine assumed the model is stuck and stopped waiting. Whatever output existed is kept.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Another user pressed the Stop button.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="option-c"
+               data-explanation-right="Yes. Pass an asyncio.Event (or a similar cancellation signal) from the UI all the way down into the streaming loop, and check event.is_set() between chunks. This is exactly what the council does — and it is the cleanest pattern for any streaming app."
+               data-explanation-wrong="That works but it is heavy-handed. Killing a process or relying on a generic try/except loses you the chance to keep partial output and clean up gracefully. A proper cancellation signal threaded through the code is the cleaner pattern — and the one the council uses.">
+            <h3 class="quiz-question">Q3. You are directing an AI to add a Cancel button to a different streaming app you are building. Based on what you saw here, what is the cleanest pattern to ask for?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Kill the whole Python process and restart it.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Wrap the streaming call in a try/except and hope the user&apos;s click raises an exception.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Pass an asyncio.Event from the UI down into the streaming loop and check event.is_set() between chunks.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module3')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module3')">Try Again</button>
+        </div>
+
+        <div class="callout callout-info" style="margin-top: var(--space-10)">
+          <div class="callout-icon">→</div>
+          <div class="callout-content">
+            <strong class="callout-title">Coming up in Module 4</strong>
+            <p>Q1 hinted at it: when the council runs more than ~60 GB of models, parallel falls back to batched. Next module shows exactly how the engine measures <span class="term" data-definition="VRAM is the dedicated memory on your GPU where models live while they run. Each LLM occupies a chunk of VRAM proportional to its size.">VRAM</span>, decides who goes in which wave, and waits between waves so the GPU does not melt.</p>
+          </div>
+        </div>
+
+      </section>
+    </div>
+  </div>
+</section>

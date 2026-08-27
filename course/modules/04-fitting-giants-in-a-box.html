@@ -1,0 +1,403 @@
+<section class="module" id="module-4" style="background: var(--color-bg)">
+  <div class="module-content">
+
+    <header class="module-header animate-in">
+      <span class="module-number">04</span>
+      <h1 class="module-title">Fitting giants in a box</h1>
+      <p class="module-subtitle">How the council packs huge models into a finite slice of GPU memory.</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- ============================================================
+           SCREEN 1: The moving-truck metaphor
+           ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Picture a moving truck</h2>
+
+        <p>When you click the <strong>Deep</strong> preset, you are asking three large <span class="term" data-definition="A large language model — the kind of AI that writes, reasons, and answers questions. Each one is a giant file of numbers that has to be loaded into fast memory before it can run.">LLM</span>s to think at the same time. Together they weigh about 81 <span class="term" data-definition="Gigabyte — a unit of digital size. One GB is roughly the space taken by a long high-definition movie. Big AI models are measured in tens of GB.">GB</span>. Your <span class="term" data-definition="Graphics Processing Unit — the chip in your computer that handles AI workloads. Its built-in fast memory is called VRAM and it is much smaller than your regular RAM.">GPU</span> has roughly 100 GB total, but the council caps itself at 60 GB to stay safe.</p>
+
+        <p>Think of it like packing a moving truck. The truck has a fixed capacity. Your furniture comes in different sizes. If everything fits in one trip you go once. If not, you make multiple trips, and you let the engine cool between runs.</p>
+
+        <div class="icon-rows stagger-children">
+          <div class="icon-row animate-in">
+            <div class="icon-circle" style="background: var(--color-actor-1)">🛋️</div>
+            <div>
+              <strong>The 40 GB sofa — Llama 3.3 (70B)</strong>
+              <p>Biggest piece. On its own it eats most of the truck.</p>
+            </div>
+          </div>
+          <div class="icon-row animate-in">
+            <div class="icon-circle" style="background: var(--color-actor-2)">🪑</div>
+            <div>
+              <strong>The 20 GB armchairs — Qwen 32B, DeepSeek 32B</strong>
+              <p>Medium pieces. Two of them stack neatly into one trip.</p>
+            </div>
+          </div>
+          <div class="icon-row animate-in">
+            <div class="icon-circle" style="background: var(--color-actor-3)">🗄️</div>
+            <div>
+              <strong>The 17 GB dresser — Gemma 2 (27B)</strong>
+              <p>Slides into gaps that the bigger items leave behind.</p>
+            </div>
+          </div>
+          <div class="icon-row animate-in">
+            <div class="icon-circle" style="background: var(--color-actor-4)">💡</div>
+            <div>
+              <strong>The 4 GB lamp — Mistral 7B</strong>
+              <p>Fits almost anywhere. The filler item.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info">
+          <div class="callout-icon">📦</div>
+          <div class="callout-content">
+            <strong class="callout-title">The truck has a hard wall</strong>
+            <p>Try to load more than fits and the GPU throws an <span class="term" data-definition="Out Of Memory error — what a GPU does when you ask it to hold more than it can. The program crashes instead of running slowly. It is the AI equivalent of breaking the truck axle.">OOM</span> error. The whole run dies. That is why we plan trips before we load.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           SCREEN 2: The decision in 8 lines (Snippet A) + worked example
+           ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">One trip or many?</h2>
+
+        <p>Before anything else the council adds up the total <span class="term" data-definition="Video RAM — the dedicated fast memory built into a GPU. It is separate from your computer regular RAM and much smaller. When VRAM fills up the GPU cannot run the model. Roughly speaking, VRAM is the size of the moving truck in this module.">VRAM</span> the selected models need and compares it to the 60 GB ceiling. That single comparison decides everything.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line"><span class="code-keyword">from</span> config <span class="code-keyword">import</span> MAX_CONCURRENT_VRAM_GB</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Calculate total VRAM needed for all models</span></span>
+<span class="code-line">total_vram = <span class="code-function">sum</span>(<span class="code-function">get_model_vram</span>(m) <span class="code-keyword">for</span> m <span class="code-keyword">in</span> models)</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Only use batching if total VRAM exceeds the limit</span></span>
+<span class="code-line"><span class="code-keyword">if</span> total_vram &lt;= MAX_CONCURRENT_VRAM_GB:</span>
+<span class="code-line">    <span class="code-comment"># All models fit - run in parallel (single batch)</span></span>
+<span class="code-line">    batches = [models]</span>
+<span class="code-line">    execution_mode = <span class="code-string">"PARALLEL"</span></span>
+<span class="code-line"><span class="code-keyword">else</span>:</span>
+<span class="code-line">    <span class="code-comment"># Need to batch to avoid VRAM exhaustion</span></span>
+<span class="code-line">    batches = <span class="code-function">create_vram_batches</span>(models)</span>
+<span class="code-line">    execution_mode = <span class="code-string">"BATCHED"</span></span>
+</code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Pull in the memory ceiling we set elsewhere — the size of the truck.</p>
+              <p class="tl">Add up the weight of every piece of furniture the user picked.</p>
+              <p class="tl">If everything fits in one trip, treat the whole list as a single <span class="term" data-definition="A group of models loaded together at the same time. In this module a batch is one trip of the moving truck. Smaller models share a batch, huge ones might ride alone.">batch</span>...</p>
+              <p class="tl">...and mark this run as PARALLEL — every model talks at once.</p>
+              <p class="tl">Otherwise, hand the list to a packing function that splits it into trips...</p>
+              <p class="tl">...and mark this run as BATCHED — some models will have to wait their turn.</p>
+            </div>
+          </div>
+        </div>
+
+        <h3 style="font-family: var(--font-display); font-size: var(--text-xl); margin-top: var(--space-10); color: var(--color-accent);">Worked example: the Deep preset</h3>
+
+        <div class="step-cards stagger-children">
+          <div class="step-card animate-in">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>List the raw sizes</strong>
+              <p>Llama 70B = 40 GB, Qwen 32B = 20 GB, DeepSeek 32B = 20 GB. Total raw: 80 GB.</p>
+            </div>
+          </div>
+          <div class="step-card animate-in">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Apply the 20% safety factor</strong>
+              <p>40 × 1.20 = 48, 20 × 1.20 = 24, 20 × 1.20 = 24. Safe total: 96 GB.</p>
+            </div>
+          </div>
+          <div class="step-card animate-in">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Compare to the ceiling</strong>
+              <p>96 GB &gt; 60 GB. The "parallel" branch is impossible.</p>
+            </div>
+          </div>
+          <div class="step-card animate-in">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <strong>Verdict</strong>
+              <p>Execution mode = <code>BATCHED</code>. Off to the packing algorithm.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           SCREEN 3: The packing algorithm (Snippet B) with drag-and-drop
+           ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The packing algorithm, step by step</h2>
+
+        <p>When the parallel branch is impossible, this function decides which model rides in which trip. It uses a textbook trick called <span class="term" data-definition="Bin-packing is the puzzle of fitting items of different sizes into the smallest number of containers. Movers, airlines, and cloud schedulers all use it. Greedy bin-packing means making the locally obvious choice each step instead of computing the perfect plan.">bin-packing</span> with a <span class="term" data-definition="A greedy algorithm makes the locally best choice at every step without looking ahead. It is fast, simple, and usually good enough — like packing the biggest suitcase first, then squeezing smaller items into the gaps that remain.">greedy</span> twist: sort biggest first, then drop each model into the first trip that still has room.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line"><span class="code-keyword">def</span> <span class="code-function">create_vram_batches</span>(models: <span class="code-function">list</span>[<span class="code-function">str</span>], max_vram: <span class="code-function">float</span> = <span class="code-keyword">None</span>) -&gt; <span class="code-function">list</span>[<span class="code-function">list</span>[<span class="code-function">str</span>]]:</span>
+<span class="code-line">    <span class="code-string">"""</span></span>
+<span class="code-line"><span class="code-string">    Group models into batches that fit within VRAM limits.</span></span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-string">    Strategy: Sort by VRAM descending, then greedily pack into batches.</span></span>
+<span class="code-line"><span class="code-string">    This ensures large models run alone if needed, while smaller models</span></span>
+<span class="code-line"><span class="code-string">    can run together.</span></span>
+<span class="code-line"><span class="code-string">    """</span></span>
+<span class="code-line">    <span class="code-keyword">if</span> max_vram <span class="code-keyword">is</span> <span class="code-keyword">None</span>:</span>
+<span class="code-line">        max_vram = MAX_CONCURRENT_VRAM_GB</span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-keyword">if</span> <span class="code-keyword">not</span> models:</span>
+<span class="code-line">        <span class="code-keyword">return</span> []</span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-comment"># Sort by VRAM requirement descending (largest first)</span></span>
+<span class="code-line">    sorted_models = <span class="code-function">sorted</span>(models, key=<span class="code-keyword">lambda</span> m: <span class="code-function">get_model_vram</span>(m), reverse=<span class="code-keyword">True</span>)</span>
+<span class="code-line"></span>
+<span class="code-line">    batches = []</span>
+<span class="code-line">    current_batch = []</span>
+<span class="code-line">    current_vram = <span class="code-number">0.0</span></span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-keyword">for</span> model <span class="code-keyword">in</span> sorted_models:</span>
+<span class="code-line">        model_vram = <span class="code-function">get_model_vram</span>(model)</span>
+<span class="code-line"></span>
+<span class="code-line">        <span class="code-keyword">if</span> current_vram + model_vram &lt;= max_vram:</span>
+<span class="code-line">            <span class="code-comment"># Fits in current batch</span></span>
+<span class="code-line">            current_batch.<span class="code-function">append</span>(model)</span>
+<span class="code-line">            current_vram += model_vram</span>
+<span class="code-line">        <span class="code-keyword">else</span>:</span>
+<span class="code-line">            <span class="code-comment"># Start new batch</span></span>
+<span class="code-line">            <span class="code-keyword">if</span> current_batch:</span>
+<span class="code-line">                batches.<span class="code-function">append</span>(current_batch)</span>
+<span class="code-line">            current_batch = [model]</span>
+<span class="code-line">            current_vram = model_vram</span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-comment"># Don't forget the last batch</span></span>
+<span class="code-line">    <span class="code-keyword">if</span> current_batch:</span>
+<span class="code-line">        batches.<span class="code-function">append</span>(current_batch)</span>
+<span class="code-line"></span>
+<span class="code-line">    <span class="code-keyword">return</span> batches</span>
+</code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Define the packing function — it takes a list of models and an optional ceiling.</p>
+              <p class="tl">A comment explaining the strategy: sort big to small, then pack one by one.</p>
+              <p class="tl">If the caller did not pass a ceiling, use the global one from config.</p>
+              <p class="tl">If no models were picked, return an empty list and go home.</p>
+              <p class="tl">Sort the list so the heaviest model comes first — like loading the sofa before the lamp.</p>
+              <p class="tl">Start with empty trip lists: no batches yet, no current batch, zero weight loaded.</p>
+              <p class="tl">Walk the sorted list, one model at a time, and look at its weight.</p>
+              <p class="tl">If adding this model would still fit under the ceiling, drop it into the current trip.</p>
+              <p class="tl">Otherwise close out the current trip, file it away, and start a fresh trip with just this model.</p>
+              <p class="tl">After the loop, do not forget to file the last trip you were building.</p>
+              <p class="tl">Hand back the full list of trips, in order.</p>
+            </div>
+          </div>
+        </div>
+
+        <h3 style="font-family: var(--font-display); font-size: var(--text-xl); margin-top: var(--space-10); color: var(--color-accent);">Your turn: pack the truck</h3>
+
+        <p>Drag each model chip into a batch zone. The greedy rule: load biggest first, fill each trip until the next item would overflow 60 GB, then start a new trip.</p>
+
+        <div class="dnd-container">
+          <div class="dnd-chips">
+            <div class="dnd-chip" draggable="true" data-answer="batch-1">Llama 70B — 48 GB</div>
+            <div class="dnd-chip" draggable="true" data-answer="batch-2">Qwen 32B — 24 GB</div>
+            <div class="dnd-chip" draggable="true" data-answer="batch-2">DeepSeek 32B — 24 GB</div>
+          </div>
+          <div class="dnd-zones">
+            <div class="dnd-zone" data-correct="batch-1">
+              <p class="dnd-zone-label">Trip 1 (must be ≤ 60 GB)</p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+            <div class="dnd-zone" data-correct="batch-2">
+              <p class="dnd-zone-label">Trip 2 (must be ≤ 60 GB)</p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+            <div class="dnd-zone" data-correct="batch-2">
+              <p class="dnd-zone-label">Trip 2 (second slot)</p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+          </div>
+          <button class="btn" onclick="checkDnD()">Check Matches</button>
+          <button class="btn" onclick="resetDnD()">Reset</button>
+        </div>
+
+        <div class="callout callout-accent">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Aha — greedy bin-packing is everywhere</strong>
+            <p>This same algorithm loads airplanes, plans delivery routes, and schedules cloud jobs. Once you see it, you will spot it in every system that crams big things into small boxes.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           SCREEN 4: Safety net — 20% buffer + cooldown
+           ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The safety net</h2>
+
+        <p>Numbers in the model table are minimums. Real usage drifts higher as the conversation grows. Two guardrails keep us off the cliff: a 20% memory cushion on every estimate, and a small <span class="term" data-definition="A pause between two heavy operations to let resources reset. Here, it is the wait between batches so GPU memory actually clears before the next models load.">cooldown</span> between trips so the GPU can actually free its memory.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE — SAFETY FACTOR</span>
+<pre><code><span class="code-line"><span class="code-comment"># Safety factor applied to VRAM estimates (1.20 = 20% buffer)</span></span>
+<span class="code-line"><span class="code-comment"># Accounts for VRAM fragmentation, KV cache growth, and estimation errors</span></span>
+<span class="code-line">VRAM_SAFETY_FACTOR: <span class="code-function">float</span> = <span class="code-number">1.20</span></span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-keyword">def</span> <span class="code-function">get_model_vram</span>(model: <span class="code-function">str</span>, with_safety_factor: <span class="code-function">bool</span> = <span class="code-keyword">True</span>) -&gt; <span class="code-function">float</span>:</span>
+<span class="code-line">    base_vram = MODEL_VRAM_GB.<span class="code-function">get</span>(model, <span class="code-number">10.0</span>)  <span class="code-comment"># Default 10GB if unknown</span></span>
+<span class="code-line">    <span class="code-keyword">if</span> with_safety_factor:</span>
+<span class="code-line">        <span class="code-keyword">return</span> base_vram * VRAM_SAFETY_FACTOR</span>
+<span class="code-line">    <span class="code-keyword">return</span> base_vram</span>
+</code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Define a single number — 1.20 — as the official safety cushion.</p>
+              <p class="tl">The comment names the three reasons it exists: memory <span class="term" data-definition="When memory gets allocated and freed in mismatched chunks, gaps form that nothing fits into — like a parking lot full of awkward leftover spaces. Even with enough total free memory you can run out of usable contiguous blocks.">fragmentation</span>, growing <span class="term" data-definition="Key/Value cache — extra memory the model uses to remember the conversation so far. It starts small and grows as the chat goes on. Long prompts and long answers make it balloon.">KV cache</span>, and plain estimation error.</p>
+              <p class="tl">Define a helper that looks up the raw VRAM number for a model.</p>
+              <p class="tl">If the model is not in the table, assume 10 GB as a safe default.</p>
+              <p class="tl">By default, multiply by the cushion before returning — so callers always see the padded number.</p>
+              <p class="tl">If a caller explicitly opts out, hand back the raw value.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pattern-cards stagger-children" style="margin-top: var(--space-10)">
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-accent)">
+            <div class="pattern-icon" style="background: var(--color-accent)">🛡️</div>
+            <h4 class="pattern-title">20% buffer</h4>
+            <p class="pattern-desc">Every reported model size is multiplied by 1.20 before planning. A 40 GB sofa becomes a 48 GB sofa in our books. Covers KV cache growth and memory fragmentation.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2)">⏱️</div>
+            <h4 class="pattern-title">Cooldown between trips</h4>
+            <p class="pattern-desc">After a batch finishes, wait 1 second plus 0.5 seconds for every 10 GB it used. A 48 GB batch buys a 3.4 second pause before the next models load.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3)">📉</div>
+            <h4 class="pattern-title">Hard ceiling</h4>
+            <p class="pattern-desc">60 GB on a 100 GB GPU — we never even try to use all of it. The unused 40 GB is the headroom that keeps OOM crashes rare.</p>
+          </div>
+        </div>
+
+        <div class="callout callout-accent">
+          <div class="callout-icon">⚙️</div>
+          <div class="callout-content">
+            <strong class="callout-title">Safety factors are everywhere</strong>
+            <p>Engineers pad every estimated number. Aircraft cables: rated 2× max load. Bridges: 3×. AI memory budgets: 1.2×. If a number in production code is exact, that is usually a smell.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           SCREEN 5: Quiz
+           ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Check yourself</h2>
+
+        <p>Three scenarios. Pick the answer that shows you can apply the packing rules, not just recite them.</p>
+
+        <div class="quiz-container" id="quiz-module4">
+
+          <div class="quiz-question-block"
+               data-correct="opt-q1-b"
+               data-explanation-right="Exactly. Raising the ceiling lets more models share a trip, so wall-clock time drops. But you also shrink your headroom. The day a long prompt or a long answer pushes the KV cache past 100 GB, you get an OOM crash. Headroom is what keeps that day from arriving."
+               data-explanation-wrong="Not quite. Bumping the ceiling does not make any single model faster — each one still runs at the same speed. What changes is how many can run at once, which trades safety for throughput. The safety factor stays at 1.20 either way.">
+            <h3 class="quiz-question">Scenario 1 — You bump <code>MAX_CONCURRENT_VRAM_GB</code> from 60 to 100. What is the most likely consequence?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="opt-q1-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Models become faster individually because they have more room.</span>
+              </button>
+              <button class="quiz-option" data-value="opt-q1-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>More models fit in one parallel batch and total time drops — until a single big prompt pushes the GPU past 100 GB and the run OOM-crashes.</span>
+              </button>
+              <button class="quiz-option" data-value="opt-q1-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Nothing changes because the safety factor still pads each estimate.</span>
+              </button>
+              <button class="quiz-option" data-value="opt-q1-d" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The 20% safety factor stops working above 60 GB.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="opt-q2-c"
+               data-explanation-right="Right. Padded sizes are 48, 24, 24, 20.4 = 116.4 GB total — well over 60, so the run is BATCHED. Greedy fills biggest first: Trip 1 holds the 48 GB Llama alone (anything else would push past 60). Trip 2 takes 24 + 24 = 48. Trip 3 takes the 20.4 GB Gemma on its own. Three trips."
+               data-explanation-wrong="Re-trace the greedy steps. After multiplying by 1.20 the sizes are 48, 24, 24, 20.4 GB. Sort biggest first, then drop each into the first trip with room. Llama at 48 leaves only 12 GB of headroom — none of the others fit beside it, so it rides alone. Now keep going.">
+            <h3 class="quiz-question">Scenario 2 — You select 4 models with raw VRAM costs [40, 20, 20, 17]. The ceiling is 60 GB and the safety factor is 1.20. Parallel or batched, and how many batches?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="opt-q2-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>PARALLEL — one trip with all four models, total 97 GB.</span>
+              </button>
+              <button class="quiz-option" data-value="opt-q2-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>BATCHED — two trips: [Llama] and [Qwen, DeepSeek, Gemma].</span>
+              </button>
+              <button class="quiz-option" data-value="opt-q2-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>BATCHED — three trips: [Llama 48 GB], [Qwen 24 + DeepSeek 24], [Gemma 20.4].</span>
+              </button>
+              <button class="quiz-option" data-value="opt-q2-d" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>BATCHED — four trips, one model per trip, to be safe.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="opt-q3-b"
+               data-explanation-right="Spot on. Most OOM crashes are not about a faulty GPU — they are about an estimate that was right under ideal conditions but grew past the limit in real use. Ask for the peak memory the run actually hits and whether the code reserves any safety margin. A 1.2× cushion is the standard fix."
+               data-explanation-wrong="Not the first question to ask. Hardware brand and driver versions matter eventually, but most OOM crashes in AI apps come from an estimate that did not include the KV cache growing over the conversation. Look at peak usage and safety margin before blaming the GPU.">
+            <h3 class="quiz-question">Scenario 3 — Your friend's AI app keeps OOM-crashing on a fancy GPU. Based on this module, what is the first question to ask?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="opt-q3-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Which brand of GPU and which driver version is it running?</span>
+              </button>
+              <button class="quiz-option" data-value="opt-q3-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>What is the peak memory the run actually allocates, and does the code reserve any safety margin?</span>
+              </button>
+              <button class="quiz-option" data-value="opt-q3-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Have they tried turning the computer off and on again?</span>
+              </button>
+              <button class="quiz-option" data-value="opt-q3-d" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Is the model written in the same programming language as the app?</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module4')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module4')">Try Again</button>
+        </div>
+
+        <p style="margin-top: var(--space-10); color: var(--color-text-secondary); font-size: var(--text-sm);">Next up: now that we know how the models <em>run</em>, we look at what they actually <em>do</em> in Stage 2 — anonymously reviewing each other's work.</p>
+      </section>
+
+    </div>
+  </div>
+</section>

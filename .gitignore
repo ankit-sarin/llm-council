@@ -123,3 +123,6 @@ cython_debug/
 .DS_Store
 sessions/
 logs/
+
+# Course site build artifact — regenerate with: bash course/build.sh
+course/index.html

@@ -1,0 +1,415 @@
+<section class="module" id="module-6" style="background: var(--color-bg)">
+  <div class="module-content">
+
+    <header class="module-header animate-in">
+      <span class="module-number">06</span>
+      <h1 class="module-title">The Chairman's Gavel</h1>
+      <p class="module-subtitle">How Claude synthesizes the council, adds its own insights, and consults the web — with every contribution tagged for honesty.</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- ============================== SCREEN 1 ============================== -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The chief justice writes the opinion</h2>
+        <p>Picture the <span class="term" data-definition="The senior judge on a court who leads deliberations and often writes the final majority opinion that becomes the official ruling.">chief justice</span> of a supreme court. The other justices have argued, the clerks have written briefs, and now the chief sits down to draft the final opinion. They can agree with parts, override mistakes, add their own reasoning, and even send a clerk to fetch outside <span class="term" data-definition="Earlier rulings that a court can cite to support a new decision. In our app, a precedent is the equivalent of a web search result the chairman pulls in.">precedents</span>.</p>
+        <p>In our codebase, that chief justice is <strong>Claude Opus 4.5</strong>. Claude is <em>not</em> one of the council models — it sits one level above them as the synthesizer.</p>
+
+        <div class="pattern-cards" style="margin-top: var(--space-8)">
+          <div class="pattern-card" style="border-top: 3px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2); color: white">1</div>
+            <h4 class="pattern-title">Council Models</h4>
+            <p class="pattern-desc">Local Ollama models answer the question independently. Each brings its own training, biases, and voice.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3); color: white">2</div>
+            <h4 class="pattern-title">Peer Reviews</h4>
+            <p class="pattern-desc">The same models grade each other anonymously on accuracy, insight, and completeness.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-actor-4)">
+            <div class="pattern-icon" style="background: var(--color-actor-4); color: white">3</div>
+            <h4 class="pattern-title">Consensus Score</h4>
+            <p class="pattern-desc">Variance across the reviews collapses into one number: how much the council agreed.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-accent)">
+            <div class="pattern-icon" style="background: var(--color-accent); color: white">4</div>
+            <h4 class="pattern-title">Chairman</h4>
+            <p class="pattern-desc">Claude reads all of the above and writes the final answer — synthesizing, correcting, and adding.</p>
+          </div>
+        </div>
+
+        <div class="callout callout-info" style="margin-top: var(--space-8)">
+          <div class="callout-icon">📜</div>
+          <div class="callout-content">
+            <strong class="callout-title">The honesty signal</strong>
+            <p>When you read the final answer, you might see little tags like <code>[CHAIRMAN'S INSIGHT]</code> or <code>[WEB SOURCE]</code> sprinkled through it. Those are not decorations — they are the chairman saying "this part did not come from the council, it came from me, or from a web search."</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================== SCREEN 2 ============================== -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Why a different model on top?</h2>
+        <p>The council is made of local 7B–70B models. The chairman is Claude Opus 4.5 — a frontier model running through the <span class="term" data-definition="A paid API from Anthropic that lets you send prompts to Claude and get answers back. Different from local models because the model runs on Anthropic's servers, not your machine.">Anthropic API</span>. Why the split?</p>
+
+        <div class="icon-rows" style="margin-top: var(--space-6)">
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-actor-2)">🧠</div>
+            <div>
+              <strong>Diversity from the council, quality from the chairman</strong>
+              <p>Many small models give you a wide net of perspectives. One strong model on top gives you a careful editor who can spot mistakes none of them caught.</p>
+            </div>
+          </div>
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-actor-3)">⚖️</div>
+            <div>
+              <strong>If Claude were on the council, it would dominate</strong>
+              <p>Putting a frontier model next to 7B models in the peer-review stage would just produce four agreeing voices. We would lose the diversity that makes the council worth running.</p>
+            </div>
+          </div>
+          <div class="icon-row">
+            <div class="icon-circle" style="background: var(--color-accent)">🔍</div>
+            <div>
+              <strong>The chairman gets <span class="term" data-definition="When an AI model is given the ability to call external functions (like a web search) during its response. The model decides when to call, what to pass, and how to use the result. Also called function calling.">tool use</span> — the council does not</strong>
+              <p>Claude can call a web search mid-answer to verify a fact. The local Ollama models cannot. That capability gap is exactly the point of having a separate chairman.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent" style="margin-top: var(--space-8)">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Aha! Tool use is the unlock</strong>
+            <p><span class="term" data-definition="The ability of an LLM to call external tools (functions, APIs, databases) during a conversation. The model becomes an orchestrator instead of just a text generator.">Tool use</span> (also called <span class="term" data-definition="The same concept as tool use — the model decides to call a named function with specific arguments, and your code runs the function and feeds back the result. The terms are used interchangeably.">function calling</span>) is the single biggest unlock in modern <span class="term" data-definition="Application Programming Interface — a way for two pieces of software to talk to each other. Here, our Python code talking to Anthropic's Claude servers.">LLM APIs</span>. The model becomes a decision-maker that orchestrates external systems, not a text generator that only knows its training data. Any time you want an AI app to look something up, run a calculation, or call your database — this is the pattern.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================== SCREEN 3 ============================== -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The marching orders</h2>
+        <p>Before Claude writes a word, we send it a long <span class="term" data-definition="The opening block of text in an LLM prompt that defines the model's role, constraints, and behavior — like the job description handed to a new employee on day one.">system prompt</span> that tells it exactly how to behave. Two fragments matter most: permission to add independent insights, and permission to call web search.</p>
+        <p>Both fragments share one rule — <strong>if you add it, tag it</strong>. That tagging rule is what makes the final output honest.</p>
+
+        <h3 style="margin-top: var(--space-8); font-family: var(--font-display); font-size: var(--text-lg); color: var(--color-accent)">Fragment 1 — Independent thinking</h3>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line"><span class="code-comment"># Independent thinking instructions</span></span>
+<span class="code-line"><span class="code-string">"""</span></span>
+<span class="code-line"><span class="code-string">CHAIRMAN'S INDEPENDENT ANALYSIS:</span></span>
+<span class="code-line"><span class="code-string">As Chairman, you are not limited to just summarizing the council's responses. You should:</span></span>
+<span class="code-line"><span class="code-string">- Add your own expert insights and analysis that go beyond what the council provided</span></span>
+<span class="code-line"><span class="code-string">- Identify gaps in the council's responses and fill them with your own knowledge</span></span>
+<span class="code-line"><span class="code-string">- Correct any factual errors you notice, even if the council members agreed on them</span></span>
+<span class="code-line"><span class="code-string">- Provide additional context or nuances the council may have missed</span></span>
+<span class="code-line"><span class="code-string"></span></span>
+<span class="code-line"><span class="code-string">When you add independent insights, clearly mark them with [CHAIRMAN'S INSIGHT] so users know this came from your analysis rather than the council.</span></span>
+<span class="code-line"><span class="code-string">"""</span></span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Here is the chunk of <span class="term" data-definition="A piece of text we send to an LLM that shapes its response. Instructions, examples, and context all live in the prompt.">prompt</span> text we paste in for the independent-thinking rule.</p>
+              <p class="tl">We open a triple-quoted Python string and announce a new role: CHAIRMAN'S INDEPENDENT ANALYSIS.</p>
+              <p class="tl">We give Claude explicit permission to go beyond summarizing — to actually think for itself.</p>
+              <p class="tl">If the council missed something, Claude should fill the gap with its own knowledge.</p>
+              <p class="tl">If the council made a mistake — even one they all agreed on — Claude should correct it.</p>
+              <p class="tl">If there is useful nuance nobody mentioned, Claude should add it.</p>
+              <p class="tl">And here is the rule that makes it honest: anything Claude adds on its own must be tagged <code>[CHAIRMAN'S INSIGHT]</code> so the reader can tell.</p>
+            </div>
+          </div>
+        </div>
+
+        <h3 style="margin-top: var(--space-8); font-family: var(--font-display); font-size: var(--text-lg); color: var(--color-accent)">Fragment 2 — Web search permission</h3>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line"><span class="code-comment"># Web search instructions</span></span>
+<span class="code-line"><span class="code-string">"""</span></span>
+<span class="code-line"><span class="code-string">WEB SEARCH CAPABILITY:</span></span>
+<span class="code-line"><span class="code-string">You have access to web search to verify facts or find current information. Use it when:</span></span>
+<span class="code-line"><span class="code-string">- Council responses conflict and you need to verify which is correct</span></span>
+<span class="code-line"><span class="code-string">- The question involves recent events or rapidly changing information</span></span>
+<span class="code-line"><span class="code-string">- You want to supplement the council's knowledge with additional sources</span></span>
+<span class="code-line"><span class="code-string"></span></span>
+<span class="code-line"><span class="code-string">When you use web search, mark information from it with [WEB SOURCE] so users know its origin.</span></span>
+<span class="code-line"><span class="code-string">"""</span></span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">This is the second prompt chunk — it tells Claude it has a search tool available.</p>
+              <p class="tl">We give Claude three trigger conditions for when to actually use the tool.</p>
+              <p class="tl">First trigger: the council disagrees and Claude needs a tiebreaker.</p>
+              <p class="tl">Second trigger: the question is about recent events that the council's training data is too old for.</p>
+              <p class="tl">Third trigger: Claude simply wants to back up the council with extra sources.</p>
+              <p class="tl">And the same honesty rule: any fact pulled from the web has to be tagged <code>[WEB SOURCE]</code>.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info" style="margin-top: var(--space-8)">
+          <div class="callout-icon">🏷️</div>
+          <div class="callout-content">
+            <strong class="callout-title">Why explicit <span class="term" data-definition="The practice of marking which source a piece of information came from. In AI outputs, attribution tags like [WEB SOURCE] tell the reader the origin of each claim.">attribution</span> matters</strong>
+            <p>When AI outputs blend multiple sources, it becomes impossible for the reader to know what is verified versus invented. Forcing the model to tag its own sources is one of the easiest, most underrated techniques for trustworthy AI — and it costs you almost nothing to add.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================== SCREEN 4 ============================== -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">What a tool definition looks like</h2>
+        <p>Telling Claude "you have web search" in prose is not enough. We also have to hand it a <span class="term" data-definition="A structured description of a piece of data written in JSON — naming each field, its type, and whether it is required. Think of it as a form template the model has to fill out.">JSON schema</span> that names the tool, describes it, and lists its inputs. The model reads the schema and decides when to call it.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line">WEB_SEARCH_TOOL = {</span>
+<span class="code-line">    <span class="code-property">"name"</span>: <span class="code-string">"web_search"</span>,</span>
+<span class="code-line">    <span class="code-property">"description"</span>: <span class="code-string">"Search the web for current information to supplement council responses. Use this when you need to verify facts, get up-to-date information, or find information the council members may have missed."</span>,</span>
+<span class="code-line">    <span class="code-property">"input_schema"</span>: {</span>
+<span class="code-line">        <span class="code-property">"type"</span>: <span class="code-string">"object"</span>,</span>
+<span class="code-line">        <span class="code-property">"properties"</span>: {</span>
+<span class="code-line">            <span class="code-property">"query"</span>: {</span>
+<span class="code-line">                <span class="code-property">"type"</span>: <span class="code-string">"string"</span>,</span>
+<span class="code-line">                <span class="code-property">"description"</span>: <span class="code-string">"The search query to look up"</span></span>
+<span class="code-line">            }</span>
+<span class="code-line">        },</span>
+<span class="code-line">        <span class="code-property">"required"</span>: [<span class="code-string">"query"</span>]</span>
+<span class="code-line">    }</span>
+<span class="code-line">}</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">We are defining a single tool the model can call. The whole tool is a Python dictionary.</p>
+              <p class="tl">First field: the tool's name. The model literally writes this name when it decides to call it.</p>
+              <p class="tl">Then a long human-readable description. This is how the model decides <em>when</em> to reach for the tool — so it pays to be specific.</p>
+              <p class="tl">Now the input schema — a nested form that says "if you call this tool, here is the shape of arguments you must pass."</p>
+              <p class="tl">The arguments are an object with one field inside it.</p>
+              <p class="tl">That field is called <code>query</code> and it has to be a string.</p>
+              <p class="tl">And a description so the model knows what to put in there.</p>
+              <p class="tl">We close out the properties block.</p>
+              <p class="tl">Finally we mark <code>query</code> as required — the model is not allowed to call the tool without one.</p>
+            </div>
+          </div>
+        </div>
+
+        <h3 style="margin-top: var(--space-10); font-family: var(--font-display); font-size: var(--text-xl); text-align: center">The tool-use loop in action</h3>
+        <p style="text-align: center; color: var(--color-text-secondary); margin-bottom: var(--space-6)">Step through what happens when Claude decides to verify a fact mid-answer.</p>
+
+        <div class="flow-animation" data-steps='[{"highlight":"flow-actor-1","label":"Engine sends prompt with web_search tool defined"},{"highlight":"flow-actor-2","label":"Chairman starts writing the synthesis","packet":true,"from":"actor-1","to":"actor-2"},{"highlight":"flow-actor-2","label":"Chairman decides to verify a fact"},{"highlight":"flow-actor-3","label":"Chairman calls web_search","packet":true,"from":"actor-2","to":"actor-3"},{"highlight":"flow-actor-3","label":"Search returns results"},{"highlight":"flow-actor-2","label":"Chairman continues with WEB SOURCE tag","packet":true,"from":"actor-3","to":"actor-2"},{"highlight":"flow-actor-2","label":"Final synthesis is returned"}]'>
+          <div class="flow-actors">
+            <div class="flow-actor" id="flow-actor-1">
+              <div class="flow-actor-icon" style="background: var(--color-actor-3); color: white">⚙️</div>
+              <span>Engine</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-2">
+              <div class="flow-actor-icon" style="background: var(--color-accent); color: white">🧑‍⚖️</div>
+              <span>Chairman (Claude)</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-3">
+              <div class="flow-actor-icon" style="background: var(--color-actor-4); color: white">🔍</div>
+              <span>Web Search Tool</span>
+            </div>
+          </div>
+
+          <div class="flow-packet" id="flow-packet"></div>
+
+          <div class="flow-step-label" id="flow-label">Click "Next Step" to begin</div>
+
+          <div class="flow-controls">
+            <button class="btn flow-next-btn">Next Step</button>
+            <button class="btn flow-reset-btn">Restart</button>
+            <span class="flow-progress"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================== SCREEN 5 ============================== -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Adapting to low consensus</h2>
+        <p>Remember the <span class="term" data-definition="A 0–100 score that summarizes how much the council members agreed with each other. Calculated from the variance of their peer-review scores in Module 5.">consensus score</span> from Module 5? It does not just sit there as a meter for the user — it actually changes what gets sent to Claude. When agreement is low, the chairman's prompt grows a new section.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line"><span class="code-comment"># When consensus is low, emphasize the importance of addressing disagreements</span></span>
+<span class="code-line"><span class="code-keyword">if</span> consensus.level == <span class="code-string">"low"</span>:</span>
+<span class="code-line">    disagreement_emphasis = <span class="code-string">"""</span></span>
+<span class="code-line"><span class="code-string">IMPORTANT: The council shows LOW CONSENSUS on this topic. This indicates the question may be complex, subjective, or have multiple valid perspectives. Pay special attention to:</span></span>
+<span class="code-line"><span class="code-string">- Why different council members reached different conclusions</span></span>
+<span class="code-line"><span class="code-string">- What underlying assumptions or values might explain the disagreement</span></span>
+<span class="code-line"><span class="code-string">- Whether the disagreement reveals important nuances the user should know about</span></span>
+<span class="code-line"><span class="code-string">- Present multiple perspectives fairly rather than forcing artificial agreement</span></span>
+<span class="code-line"><span class="code-string">"""</span></span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">A comment reminds us why this branch exists: low agreement should change the chairman's behavior.</p>
+              <p class="tl">We check the consensus level. If it is "low," we build an extra <span class="term" data-definition="A single command that tells the computer what to do. Each line of code is typically one instruction.">instruction</span> block.</p>
+              <p class="tl">We open a new triple-quoted string and announce LOW CONSENSUS at the top so Claude cannot miss it.</p>
+              <p class="tl">First focus: ask Claude to think about <em>why</em> the council split.</p>
+              <p class="tl">Second focus: surface the underlying assumptions or values driving the disagreement.</p>
+              <p class="tl">Third focus: tell the user if the disagreement itself is meaningful.</p>
+              <p class="tl">And the punchline: do not paper over the split — present multiple perspectives fairly instead of pretending the council agreed.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info" style="margin-top: var(--space-8)">
+          <div class="callout-icon">🔗</div>
+          <div class="callout-content">
+            <strong class="callout-title">Cross-module wiring</strong>
+            <p>The <span class="term" data-definition="A measure of how spread out a set of numbers is. High variance means the numbers disagree a lot; low variance means they cluster around the same value. Module 5 uses this to compute consensus.">variance</span> math from Module 5 produces a label — "low" / "medium" / "high" — and that label flips this <code>if</code> statement on or off. So Stage 2's review math literally rewrites Stage 3's prompt. That cross-stage data flow is what makes the pipeline feel like one organism instead of three scripts taped together.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================== SCREEN 6 ============================== -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Composition tracking + quiz</h2>
+        <p>After Claude finishes writing, we do one last bookkeeping step: we measure what fraction of the final answer came from where. That breakdown becomes the three-segment meter you see in the UI.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line"><span class="code-operator">@dataclass</span></span>
+<span class="code-line"><span class="code-keyword">class</span> <span class="code-function">ResponseComposition</span>:</span>
+<span class="code-line">    <span class="code-string">"""Tracks the source composition of the chairman's synthesis."""</span></span>
+<span class="code-line">    council_contribution: <span class="code-keyword">float</span>  <span class="code-comment"># 0-100, percentage from council model responses</span></span>
+<span class="code-line">    chairman_independent: <span class="code-keyword">float</span>  <span class="code-comment"># 0-100, percentage from chairman's own analysis</span></span>
+<span class="code-line">    web_search_used: <span class="code-keyword">float</span>  <span class="code-comment"># 0-100, percentage from web search</span></span>
+<span class="code-line">    web_searches_performed: <span class="code-keyword">list</span>[<span class="code-keyword">str</span>]  <span class="code-comment"># List of search queries performed</span></span>
+<span class="code-line">    chairman_insights: <span class="code-keyword">list</span>[<span class="code-keyword">str</span>]  <span class="code-comment"># Key insights added by chairman independently</span></span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">The <code>@dataclass</code> decorator is shorthand for "make this a tidy data container without me writing boilerplate."</p>
+              <p class="tl">We define a <span class="term" data-definition="A Python class designed to hold a fixed set of named fields with no extra logic. Using @dataclass auto-generates the boring init code so you just list the fields.">dataclass</span> called <code>ResponseComposition</code>.</p>
+              <p class="tl">A one-line <span class="term" data-definition="A string of text in code that explains what the surrounding code does. Stored on the class itself in Python so tools can read it.">docstring</span> tells future readers what this object is for.</p>
+              <p class="tl">First field: what percentage of the answer came from the council models (0–100).</p>
+              <p class="tl">Second field: what percentage was Claude's own analysis. These are the bits tagged <code>[CHAIRMAN'S INSIGHT]</code>.</p>
+              <p class="tl">Third field: what percentage came from web search. The three percentages always sum to 100.</p>
+              <p class="tl">Fourth field: the actual list of search queries Claude ran — useful for the audit trail.</p>
+              <p class="tl">Fifth field: the list of insights Claude added on its own — also for the audit trail.</p>
+            </div>
+          </div>
+        </div>
+
+        <p style="margin-top: var(--space-10); font-size: var(--text-lg)"><strong>Test your understanding.</strong> Four scenarios that the chairman has to handle in the wild.</p>
+
+        <div class="quiz-container" id="quiz-module6">
+
+          <div class="quiz-question-block"
+               data-correct="option-a"
+               data-explanation-right="Exactly. No tags means Claude felt the council had it covered — no errors to correct, no facts to verify, no gaps to fill. That is a healthy outcome, not a bug. The tags are an honesty signal that only fires when something was actually added."
+               data-explanation-wrong="Think about what the tags actually mean. They are not required decorations — they only appear when Claude adds something beyond the council. Their absence is information, not a failure mode.">
+            <h3 class="quiz-question">Q1. You read a final answer and there are NO <code>[CHAIRMAN'S INSIGHT]</code> or <code>[WEB SOURCE]</code> tags. What is the most likely conclusion?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The council's responses were sufficient — Claude did not need to add anything. Healthy outcome.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Web search is broken and needs debugging.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Claude is being lazy and skipped the attribution step.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="option-b"
+               data-explanation-right="Right. Local models cannot call external tools through Ollama in this pipeline, and even if they could, search at the council stage would homogenize their answers — every model would pull from the same top search results. Putting search only at the synthesis layer keeps the council diverse and the chairman well-informed."
+               data-explanation-wrong="Look closer at the architecture. The split is not arbitrary — search at the council stage would actually hurt the system by making every council member rely on the same external results, killing the diversity the council exists to provide.">
+            <h3 class="quiz-question">Q2. Why give the chairman web search but not the council members?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The local models are smaller and would write bad search queries.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The council is meant to capture each model's internal knowledge. Adding search would dilute that signal and make all the council voices converge on the same web results. Search at the synthesis step verifies and supplements without homogenizing.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Web search is too expensive to run for every model.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="option-c"
+               data-explanation-right="Exactly the transfer we wanted you to make. Have the bot tag its sources — [FROM DOCS] and [GENERAL KNOWLEDGE] — the same way the chairman uses [CHAIRMAN'S INSIGHT] and [WEB SOURCE]. Explicit attribution lets the user calibrate trust per sentence. This pattern works in any AI app where the model blends multiple sources."
+               data-explanation-wrong="Reread Screen 3. The chairman pattern is not about temperature tuning or model size — it is about making the model tag its own sources so the reader can tell what is verified versus invented. That same tag-your-sources idea is the cleanest answer to your friend's question.">
+            <h3 class="quiz-question">Q3. Your friend is building a customer-support bot and asks: "How do I make my AI tell me when it is making things up versus quoting docs?" Based on this module, what is the cleanest pattern to suggest?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Lower the model's temperature so it stops hallucinating.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Switch to a bigger model — bigger models make fewer things up.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Have it cite sources with tags like <code>[FROM DOCS]</code> and <code>[GENERAL KNOWLEDGE]</code>. This is exactly the chairman's <code>[CHAIRMAN'S INSIGHT]</code> / <code>[WEB SOURCE]</code> pattern.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="option-b"
+               data-explanation-right="Perfect — that is the cross-module data flow we built in Modules 5 and 6 together. Stage 2's variance math sets consensus.level. If it lands at low, the if-block in council.py grows the disagreement_emphasis section, which tells Claude to present multiple perspectives instead of forcing artificial agreement. Stage 2 literally rewrites Stage 3's prompt."
+               data-explanation-wrong="Walk back through Modules 5 and 6. The consensus number comes from the peer-review variance math (Module 5). When it lands at 'low,' a specific if-block in council.py adds a new prompt section telling Claude not to force agreement. The trigger and the new prompt section live in the same file.">
+            <h3 class="quiz-question">Q4. The council reports a consensus score of 28/100. The chairman's prompt grows a new section. What is its purpose, and where in the code is that decided?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The new section is added by Claude itself when it notices conflicting responses in the input. Nothing in our code does it.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The new section is the <code>disagreement_emphasis</code> block in <code>council.py</code>. It tells Claude not to force artificial agreement and to present multiple perspectives. It is triggered by <code>if consensus.level == "low"</code> — and "low" is decided by the variance math from Module 5. A high-variance Stage 2 rewrites Stage 3's prompt.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The new section is the web-search permission block. It only appears when consensus is low so the chairman can fact-check.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module6')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module6')">Try Again</button>
+        </div>
+
+        <!-- ============================== CLOSING CARD ============================== -->
+        <div class="callout callout-accent" style="margin-top: var(--space-12); border-left-width: 6px">
+          <div class="callout-icon">🎓</div>
+          <div class="callout-content">
+            <strong class="callout-title">You finished the course</strong>
+            <p>You can now read this codebase end-to-end, ask an AI assistant to build you a council pattern with peer review and a chairman, debug streaming hiccups, batch heavy models around a VRAM budget, score consensus from variance, and demand explicit <span class="term" data-definition="A specific reference back to the source of a claim. In AI outputs, a citation is usually a tag, URL, or quote that lets the reader trace the fact back to where it came from.">citations</span> so your AI never quietly invents facts. That last skill — refusing AI output that does not tag its own <span class="term" data-definition="When an AI model invents a fact that sounds plausible but is not true. The chairman's attribution tags exist precisely to make hallucinations visible.">hallucinations</span> — is the single most useful habit you can take from this course.</p>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+  </div>
+</section>

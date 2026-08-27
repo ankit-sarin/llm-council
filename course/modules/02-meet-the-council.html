@@ -1,0 +1,360 @@
+<section class="module" id="module-2" style="background: var(--color-bg);">
+  <div class="module-content">
+    <header class="module-header animate-in">
+      <span class="module-number">02</span>
+      <h1 class="module-title">Meet the council</h1>
+      <p class="module-subtitle">Six characters with six different brains — five locals and one cloud chairman.</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- ============================================================ -->
+      <!-- SCREEN 1: The cast list -->
+      <!-- ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The cast list</h2>
+        <p>Think of the council like a <strong>medical tumor board</strong>. A surgeon, a radiologist, and a pathologist all look at the same case from different angles — none is "best," they are differently shaped.</p>
+        <p>When you check boxes in the UI labeled Llama, Qwen, Gemma, Mistral, those aren&rsquo;t just names. Each is a different <span class="term" data-definition="A Large Language Model — the AI brain that reads text and writes text back. Each model is one frozen snapshot of training.">LLM</span> with its own size, training origin, and personality.</p>
+
+        <div class="icon-rows stagger-children">
+          <div class="icon-row animate-in">
+            <div class="icon-circle" style="background: var(--color-actor-1)">L</div>
+            <div>
+              <strong>Llama 3.3 70B</strong> &mdash; Meta&rsquo;s flagship
+              <p>Huge <span class="term" data-definition="Open source means the model weights (the numbers that make up the brain) are published publicly so anyone can download and run them on their own hardware.">open source</span> generalist with 70 billion <span class="term" data-definition="Parameters are the tunable numbers inside the model brain. More parameters usually means more capability but more memory cost. 70B = 70 billion of these numbers.">parameters</span>. Runs locally on your <span class="term" data-definition="Graphics Processing Unit — the specialized chip in your computer that does the heavy math for AI. LLMs need a GPU to run fast.">GPU</span>. The heaviest hitter in the local lineup.</p>
+            </div>
+          </div>
+          <div class="icon-row animate-in">
+            <div class="icon-circle" style="background: var(--color-actor-2)">Q</div>
+            <div>
+              <strong>Qwen 2.5 32B</strong> &mdash; Alibaba&rsquo;s multilingual model
+              <p>Strong middleweight from China. Especially good at non-English text. Runs locally.</p>
+            </div>
+          </div>
+          <div class="icon-row animate-in">
+            <div class="icon-circle" style="background: var(--color-actor-3)">G</div>
+            <div>
+              <strong>Gemma 2 27B</strong> &mdash; Google&rsquo;s efficient model
+              <p>Punches above its weight for its size. Quick to load. Runs locally.</p>
+            </div>
+          </div>
+          <div class="icon-row animate-in">
+            <div class="icon-circle" style="background: var(--color-actor-4)">D</div>
+            <div>
+              <strong>DeepSeek R1 32B</strong> &mdash; Reasoning specialist
+              <p>Trained to "think out loud" through hard problems. Slower, but it shows its work. Runs locally.</p>
+            </div>
+          </div>
+          <div class="icon-row animate-in">
+            <div class="icon-circle" style="background: var(--color-actor-5)">M</div>
+            <div>
+              <strong>Mistral 7B</strong> &mdash; Fast European model
+              <p>The pocket-sized speed demon. Tiny brain, almost instant answers. Runs locally.</p>
+            </div>
+          </div>
+          <div class="icon-row animate-in">
+            <div class="icon-circle" style="background: var(--color-accent)">C</div>
+            <div>
+              <strong>Claude Opus 4.5</strong> &mdash; Chairman
+              <p>The only non-local member. Made by <span class="term" data-definition="Anthropic is the AI lab that builds Claude. Their models live on their servers — you talk to them over the internet, you don&rsquo;t download them.">Anthropic</span>. Lives in the cloud and gets the final word. Reached via an <span class="term" data-definition="Application Programming Interface — a doorway one program uses to talk to another. Here, our app sends questions to Anthropic&rsquo;s servers through their API and gets answers back.">API</span> over the internet.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SCREEN 2: Local vs Remote -->
+      <!-- ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Local vs. remote &mdash; the most important distinction</h2>
+        <p>The five local models live on the DGX machine itself. Claude lives in Anthropic&rsquo;s datacenter. This single split shapes everything: cost, privacy, speed, and capability.</p>
+
+        <div class="pattern-cards">
+          <div class="pattern-card" style="border-top: 3px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2)">🏠</div>
+            <h4 class="pattern-title">Local (via <span class="term" data-definition="Ollama is a tool that lets you download open-source LLMs and run them on your own machine. Think of it like a Steam library, but for AI brains.">Ollama</span>)</h4>
+            <p class="pattern-desc">Runs on <em>your</em> hardware. Free per call. Private &mdash; the question never leaves the machine. Slower for big models because your GPU has to do all the work.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-accent)">
+            <div class="pattern-icon" style="background: var(--color-accent)">☁️</div>
+            <h4 class="pattern-title">Remote (Anthropic API)</h4>
+            <p class="pattern-desc">Runs in Anthropic&rsquo;s datacenter. Costs money per call. The question travels over the internet. Smarter on average than any single local model &mdash; especially at long reasoning and synthesis.</p>
+          </div>
+        </div>
+
+        <div class="callout callout-info">
+          <div class="callout-icon">🔑</div>
+          <div class="callout-content">
+            <strong class="callout-title">The two-letter word that decides everything</strong>
+            <p>If you see "<span class="term" data-definition="Inference is what happens when an LLM is actively running and answering a question. Training is how the brain was built; inference is the brain being used.">inference</span>" happening on <em>your</em> machine, it&rsquo;s local. If it&rsquo;s happening on <em>someone else&rsquo;s</em> machine over the internet, it&rsquo;s remote. That&rsquo;s the whole concept.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SCREEN 3: Sizes you can feel -->
+      <!-- ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Sizes you can feel</h2>
+        <p>Each local model loads its <span class="term" data-definition="Model weights are the giant table of numbers that IS the trained brain. Loading a model means copying all those numbers into GPU memory so it can answer questions.">model weights</span> into <span class="term" data-definition="Video RAM — the fast memory that lives right next to the GPU chip. LLM weights must fit here to run quickly. When VRAM fills up, big models can&rsquo;t load at all.">VRAM</span> on the GPU. Bigger model = more memory used. Think of VRAM like the trunk of a car &mdash; you only have so much space.</p>
+
+        <div class="pattern-cards">
+          <div class="pattern-card" style="border-top: 3px solid var(--color-actor-1)">
+            <div class="pattern-icon" style="background: var(--color-actor-1)">🚛</div>
+            <h4 class="pattern-title">Llama 3.3 70B</h4>
+            <p class="pattern-desc"><strong>~40 GB VRAM</strong> &mdash; basically the whole car. Best at: deep generalist reasoning when nothing smaller is good enough.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2)">🚐</div>
+            <h4 class="pattern-title">Qwen 2.5 32B</h4>
+            <p class="pattern-desc"><strong>~20 GB VRAM</strong> &mdash; a roomy van. Best at: multilingual text and balanced answers.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-actor-4)">
+            <div class="pattern-icon" style="background: var(--color-actor-4)">🚐</div>
+            <h4 class="pattern-title">DeepSeek R1 32B</h4>
+            <p class="pattern-desc"><strong>~20 GB VRAM</strong> &mdash; same footprint as Qwen. Best at: showing its work on logic-heavy questions.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3)">🚗</div>
+            <h4 class="pattern-title">Gemma 2 27B</h4>
+            <p class="pattern-desc"><strong>~17 GB VRAM</strong> &mdash; a hatchback. Best at: fast, broadly competent answers without needing a beast of a GPU.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-actor-5)">
+            <div class="pattern-icon" style="background: var(--color-actor-5)">🛵</div>
+            <h4 class="pattern-title">Mistral 7B</h4>
+            <p class="pattern-desc"><strong>~4 GB VRAM</strong> &mdash; fits in the glove compartment. Best at: speed. Can sit alongside anything else in memory.</p>
+          </div>
+          <div class="pattern-card" style="border-top: 3px solid var(--color-accent)">
+            <div class="pattern-icon" style="background: var(--color-accent)">☁️</div>
+            <h4 class="pattern-title">Claude Opus 4.5</h4>
+            <p class="pattern-desc"><strong>0 GB local VRAM</strong> &mdash; lives in the cloud. Best at: final synthesis, long reasoning, web search.</p>
+          </div>
+        </div>
+
+        <div class="callout callout-info">
+          <div class="callout-icon">🔮</div>
+          <div class="callout-content">
+            <strong class="callout-title">Coming in module 4</strong>
+            <p>What happens when you check more models than fit in your trunk? The code does a clever thing called VRAM batching &mdash; we&rsquo;ll dive into the math later.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SCREEN 4: The display names dict (Snippet A) -->
+      <!-- ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The roster, in code</h2>
+        <p>Every model has a short ID (used to call it) and a friendly display name (used in the UI). They live together in <code>config.py</code> as a <span class="term" data-definition="A dictionary is a lookup table that maps keys to values. Like a phone book: you look up a name and get a phone number back.">dictionary</span>.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line"><span class="code-property">MODEL_DISPLAY_NAMES</span>: <span class="code-keyword">dict</span>[<span class="code-keyword">str</span>, <span class="code-keyword">str</span>] = {</span>
+<span class="code-line">    <span class="code-string">"llama3.3:70b"</span>: <span class="code-string">"Llama 3.3 70B — Meta's flagship"</span>,</span>
+<span class="code-line">    <span class="code-string">"qwen2.5:32b"</span>: <span class="code-string">"Qwen 2.5 32B — Alibaba's multilingual model"</span>,</span>
+<span class="code-line">    <span class="code-string">"gemma2:27b"</span>: <span class="code-string">"Gemma 2 27B — Google's efficient model"</span>,</span>
+<span class="code-line">    <span class="code-string">"mistral:7b"</span>: <span class="code-string">"Mistral 7B — Fast European model"</span>,</span>
+<span class="code-line">    <span class="code-string">"deepseek-r1:32b"</span>: <span class="code-string">"DeepSeek R1 32B — Reasoning specialist"</span>,</span>
+<span class="code-line">    <span class="code-string">"llama3.2:3b"</span>: <span class="code-string">"Llama 3.2 3B — Lightweight fallback"</span>,</span>
+<span class="code-line">    <span class="code-string">"claude-opus-4-5-20251101"</span>: <span class="code-string">"Claude Opus 4.5 — Chairman"</span>,</span>
+<span class="code-line">}</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Open a lookup table called <code>MODEL_DISPLAY_NAMES</code>. The left side is the model&rsquo;s internal ID; the right side is what you see in the UI.</p>
+              <p class="tl">Llama 3.3 70B from Meta &mdash; the biggest open model on the roster. A heavyweight generalist.</p>
+              <p class="tl">Qwen 2.5 32B from Alibaba &mdash; great at non-English text and balanced reasoning.</p>
+              <p class="tl">Gemma 2 27B from Google &mdash; fast for its size, broadly competent.</p>
+              <p class="tl">Mistral 7B from France &mdash; the tiny sprinter that drafts answers in seconds.</p>
+              <p class="tl">DeepSeek R1 32B &mdash; the logic specialist that thinks step by step.</p>
+              <p class="tl">Llama 3.2 3B &mdash; a tiny fallback for when bigger models can&rsquo;t run.</p>
+              <p class="tl">Claude Opus 4.5 from Anthropic &mdash; the chairman. The only cloud model. Gets the final word.</p>
+              <p class="tl">Close the lookup table.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SCREEN 5: The presets explained (Snippet B) -->
+      <!-- ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The presets &mdash; three named loadouts</h2>
+        <p>Picking three models from a list of six is a small decision people make constantly. So the code ships three preset "loadouts" you can click to fill the boxes for you. Each one embodies a different <em>kind</em> of question.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line"><span class="code-property">MODEL_PRESETS</span>: <span class="code-keyword">dict</span>[<span class="code-keyword">str</span>, <span class="code-keyword">dict</span>] = {</span>
+<span class="code-line">    <span class="code-string">"fast"</span>: {</span>
+<span class="code-line">        <span class="code-property">"name"</span>: <span class="code-string">"⚡ Fast"</span>,</span>
+<span class="code-line">        <span class="code-property">"description"</span>: <span class="code-string">"Quick answers with smaller models"</span>,</span>
+<span class="code-line">        <span class="code-property">"models"</span>: [<span class="code-string">"gemma2:27b"</span>, <span class="code-string">"mistral:7b"</span>],</span>
+<span class="code-line">    },</span>
+<span class="code-line">    <span class="code-string">"balanced"</span>: {</span>
+<span class="code-line">        <span class="code-property">"name"</span>: <span class="code-string">"⚖️ Balanced"</span>,</span>
+<span class="code-line">        <span class="code-property">"description"</span>: <span class="code-string">"Good tradeoff of speed and depth"</span>,</span>
+<span class="code-line">        <span class="code-property">"models"</span>: [<span class="code-string">"qwen2.5:32b"</span>, <span class="code-string">"gemma2:27b"</span>, <span class="code-string">"mistral:7b"</span>],</span>
+<span class="code-line">    },</span>
+<span class="code-line">    <span class="code-string">"deep"</span>: {</span>
+<span class="code-line">        <span class="code-property">"name"</span>: <span class="code-string">"🔬 Deep"</span>,</span>
+<span class="code-line">        <span class="code-property">"description"</span>: <span class="code-string">"Thorough analysis with heavy hitters"</span>,</span>
+<span class="code-line">        <span class="code-property">"models"</span>: [<span class="code-string">"llama3.3:70b"</span>, <span class="code-string">"qwen2.5:32b"</span>, <span class="code-string">"deepseek-r1:32b"</span>],</span>
+<span class="code-line">    },</span>
+<span class="code-line">}</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Define three named loadouts the user can click. Each one is a small recipe.</p>
+              <p class="tl">First recipe: "fast." The decision baked in: don&rsquo;t wait long, even if the answer is rougher.</p>
+              <p class="tl">Label shown on the button (with a lightning bolt so it reads as "quick").</p>
+              <p class="tl">Subtitle explaining the tradeoff in plain words.</p>
+              <p class="tl">The actual lineup: Gemma 27B plus Mistral 7B. Both small, both quick &mdash; a chat-speed council.</p>
+              <p class="tl">End of the fast recipe.</p>
+              <p class="tl">Second recipe: "balanced." The decision: I want decent depth without melting the GPU.</p>
+              <p class="tl">Label with a scales icon &mdash; this is the default sweet spot.</p>
+              <p class="tl">Subtitle describing the tradeoff.</p>
+              <p class="tl">The lineup: a mid-size model (Qwen 32B) plus the two fast ones. Three voices, still snappy.</p>
+              <p class="tl">End of the balanced recipe.</p>
+              <p class="tl">Third recipe: "deep." The decision: correctness matters more than speed today.</p>
+              <p class="tl">Label with a microscope &mdash; this is the "let it cook" mode.</p>
+              <p class="tl">Subtitle: thorough analysis, expect to wait.</p>
+              <p class="tl">The lineup: the biggest model on the roster (Llama 70B) plus a strong middleweight (Qwen 32B) plus the reasoning specialist (DeepSeek R1). Three different angles on hard questions.</p>
+              <p class="tl">End of the deep recipe.</p>
+              <p class="tl">Close the loadouts table.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-accent">
+          <div class="callout-icon">💡</div>
+          <div class="callout-content">
+            <strong class="callout-title">Aha! moment</strong>
+            <p>Knowing which model to pick is one of the most underrated skills in modern AI engineering. Almost every production AI app is really a <em>router</em> deciding which model gets which request. These three presets are that decision, frozen as code.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- DRAG AND DROP MATCHING -->
+      <!-- ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Match the job to the model</h2>
+        <p>You&rsquo;re directing the council. Drag each chip to the situation it&rsquo;s best suited for.</p>
+
+        <div class="dnd-container">
+          <div class="dnd-chips">
+            <div class="dnd-chip" draggable="true" data-answer="llama">Llama 3.3 70B</div>
+            <div class="dnd-chip" draggable="true" data-answer="mistral">Mistral 7B</div>
+            <div class="dnd-chip" draggable="true" data-answer="deepseek">DeepSeek R1 32B</div>
+            <div class="dnd-chip" draggable="true" data-answer="claude">Claude Opus 4.5</div>
+          </div>
+          <div class="dnd-zones">
+            <div class="dnd-zone" data-correct="deepseek">
+              <p class="dnd-zone-label">I need step-by-step reasoning on a hard logic puzzle.</p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+            <div class="dnd-zone" data-correct="mistral">
+              <p class="dnd-zone-label">I want a draft answer in under 10 seconds.</p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+            <div class="dnd-zone" data-correct="llama">
+              <p class="dnd-zone-label">I need the biggest, most capable open model.</p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+            <div class="dnd-zone" data-correct="claude">
+              <p class="dnd-zone-label">I need a final, polished synthesis with web search.</p>
+              <div class="dnd-zone-target">Drop here</div>
+            </div>
+          </div>
+          <button class="btn" onclick="checkDnD()">Check Matches</button>
+          <button class="btn" onclick="resetDnD()">Reset</button>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- QUIZ -->
+      <!-- ============================================================ -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Quick check</h2>
+        <p>Three scenarios. Pick the answer that shows you understand <em>why</em>, not just what.</p>
+
+        <div class="quiz-container" id="quiz-module2">
+
+          <div class="quiz-question-block"
+               data-correct="q1-b"
+               data-explanation-right="Exactly. We use the locals for diversity of perspective, then escalate to the strongest single model for the final word. That is the whole architectural bet."
+               data-explanation-wrong="Not quite. The locals aren&rsquo;t bad &mdash; they&rsquo;re used precisely because they&rsquo;re different from each other. The point of the chairman is being a strong synthesizer at the end, not replacing the locals.">
+            <h3 class="quiz-question">A friend asks: "Why use Claude at the end if you already have five local models?"</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="q1-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Because the local models are bad &mdash; we only use them to fill space before Claude does the real work.</span>
+              </button>
+              <button class="quiz-option" data-value="q1-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Claude is roughly the strongest single model available &mdash; better at long reasoning and combining multiple inputs than any of the local ones. We use the locals for <em>diversity</em>, then escalate to Claude for the final word.</span>
+              </button>
+              <button class="quiz-option" data-value="q1-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Because using a cloud model is required by law for medical apps.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="q2-c"
+               data-explanation-right="Right. Claude Opus 4.5 is reached over an API &mdash; the question travels to Anthropic&rsquo;s datacenter. If your requirement is &lsquo;data never leaves my machine,&rsquo; you have to drop the cloud chairman and synthesize locally instead."
+               data-explanation-wrong="Look again at which member runs where. Five of the six live on your GPU; only one lives on someone else&rsquo;s servers.">
+            <h3 class="quiz-question">You&rsquo;re building a similar app and want to keep all data on your own machine. Which council member can you NOT include?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="q2-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Llama 3.3 70B &mdash; it&rsquo;s the biggest, so it must be cloud-hosted.</span>
+              </button>
+              <button class="quiz-option" data-value="q2-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Mistral 7B &mdash; small models always phone home.</span>
+              </button>
+              <button class="quiz-option" data-value="q2-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Claude Opus 4.5 &mdash; it&rsquo;s a cloud API, so every question would leave your machine.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="q3-b"
+               data-explanation-right="Spot on. The roster lives in config.py. To add a new local model you tell the code its ID (AVAILABLE_MODELS), how much VRAM it needs (MODEL_VRAM_GB), how long an input it accepts (MODEL_CONTEXT_TOKENS), and its friendly name (MODEL_DISPLAY_NAMES). That&rsquo;s the steerable surface area."
+               data-explanation-wrong="The roster isn&rsquo;t in council.py or app.py &mdash; those files use the roster. The roster itself is the static lookup tables in config.py. That&rsquo;s where you&rsquo;d point an AI assistant to register a new model.">
+            <h3 class="quiz-question">You add a seventh model &mdash; a 40B Chinese-language specialist &mdash; to the project. Where in the codebase do you register it?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="q3-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>In <code>app.py</code>, by adding a new checkbox in the Gradio UI.</span>
+              </button>
+              <button class="quiz-option" data-value="q3-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>In <code>config.py</code> &mdash; add the model ID to <code>AVAILABLE_MODELS</code>, give it a <code>MODEL_VRAM_GB</code>, a <code>MODEL_CONTEXT_TOKENS</code>, and a <code>MODEL_DISPLAY_NAMES</code> entry.</span>
+              </button>
+              <button class="quiz-option" data-value="q3-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>In <code>council.py</code>, by writing a new reviewer function for the model.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module2')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module2')">Try Again</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</section>

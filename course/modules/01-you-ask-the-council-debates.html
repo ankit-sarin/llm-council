@@ -1,0 +1,403 @@
+<section class="module" id="module-1" style="background: var(--color-bg-warm)">
+  <div class="module-content">
+
+    <header class="module-header animate-in">
+      <span class="module-number">01</span>
+      <h1 class="module-title">You ask, the council debates</h1>
+      <p class="module-subtitle">A panel of AI judges weighs in — then a head judge writes the verdict.</p>
+    </header>
+
+    <div class="module-body">
+
+      <!-- ============================================================= -->
+      <!-- SCREEN 1: The button you click                                 -->
+      <!-- ============================================================= -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The button you click</h2>
+
+        <p>Imagine you type a hard medical question into a box and hit <strong>Submit</strong>. In most apps, one AI answers and you cross your fingers. Here, something different happens.</p>
+
+        <p>Three <span class="term" data-definition="A Large Language Model is an AI trained on huge amounts of text that can write answers in plain English. Think of it as a very fast librarian who has read most of the internet and can paraphrase any of it on demand.">LLMs</span> answer at the same time. Then they review each other&rsquo;s work. Then a fourth, smarter AI reads everything and writes the final answer.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-icon">&#x1F46B;</div>
+          <div class="callout-content">
+            <strong class="callout-title">If you only remember one thing</strong>
+            <p>One AI is one opinion. A <em>council</em> of AIs is a panel &mdash; with built-in disagreement signals so you know when to trust the answer.</p>
+          </div>
+        </div>
+
+        <div class="icon-rows stagger-children">
+          <div class="icon-row animate-in">
+            <div class="icon-circle" style="background: var(--color-actor-2)">&#x1F4AC;</div>
+            <div>
+              <strong>You ask one question</strong>
+              <p>Typed into a simple web form &mdash; no command line, no setup.</p>
+            </div>
+          </div>
+          <div class="icon-row animate-in">
+            <div class="icon-circle" style="background: var(--color-actor-3)">&#x1F465;</div>
+            <div>
+              <strong>Three AIs answer in <span class="term" data-definition="In parallel means all at the same time, like three cooks each making a different dish simultaneously instead of one cook making them one after another. The whole batch finishes in the time it takes the slowest one.">parallel</span></strong>
+              <p>Each one writes its own answer, independently, without seeing the others.</p>
+            </div>
+          </div>
+          <div class="icon-row animate-in">
+            <div class="icon-circle" style="background: var(--color-actor-4)">&#x1F3C6;</div>
+            <div>
+              <strong>A head judge writes the verdict</strong>
+              <p>A smarter AI reads every answer plus every critique and synthesizes one final response for you.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================= -->
+      <!-- SCREEN 2: Three stages at a glance                             -->
+      <!-- ============================================================= -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Three stages at a glance</h2>
+
+        <p>The whole pipeline has three acts. Each one feeds the next, like rounds of a competition show.</p>
+
+        <div class="step-cards stagger-children">
+          <div class="step-card animate-in">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <strong>Initial responses (in parallel)</strong>
+              <p>Each council member receives the same question and writes an answer from scratch. They <span class="term" data-definition="Streaming means the model sends back its answer one word at a time as it thinks, like watching someone type live, instead of waiting for the whole answer and then handing it over.">stream</span> their answers back word by word.</p>
+            </div>
+          </div>
+          <div class="step-card animate-in">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <strong>Peer reviews (also in parallel)</strong>
+              <p>Each model now reads the others&rsquo; answers (anonymized) and grades them on accuracy, insight, and completeness.</p>
+            </div>
+          </div>
+          <div class="step-card animate-in">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <strong>Chairman <span class="term" data-definition="Synthesis means combining multiple inputs into one coherent output. Like a documentary editor who watches hours of interviews and stitches the best bits together into a 60-minute film with a single throughline.">synthesis</span></strong>
+              <p>A separate, more capable model (<span class="term" data-definition="Claude is an AI assistant made by Anthropic. In this project, Claude Opus 4.5 plays the head judge who reads everything the council produced and writes the final answer.">Claude</span> Opus 4.5) reads everything &mdash; answers, reviews, agreement scores &mdash; and writes the final answer.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line"><span class="code-comment"># Stage 1: parallel initial responses</span></span>
+<span class="code-line">logger.<span class="code-function">info</span>(<span class="code-string">"STAGE 1: INITIAL RESPONSES"</span>)</span>
+<span class="code-line">logger.<span class="code-function">info</span>(f<span class="code-string">"Council members: {len(models)}"</span>)</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Stage 2: parallel peer reviews</span></span>
+<span class="code-line">logger.<span class="code-function">info</span>(<span class="code-string">"STAGE 2: PEER REVIEWS"</span>)</span>
+<span class="code-line">logger.<span class="code-function">info</span>(f<span class="code-string">"Each of {len(responses)} models reviewing {len(responses)-1} responses"</span>)</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Stage 2.5: consensus calculation (variance math on parsed scores)</span></span>
+<span class="code-line"></span>
+<span class="code-line"><span class="code-comment"># Stage 3: chairman synthesis</span></span>
+<span class="code-line">logger.<span class="code-function">info</span>(<span class="code-string">"STAGE 3: CHAIRMAN SYNTHESIS"</span>)</span>
+<span class="code-line">logger.<span class="code-function">info</span>(f<span class="code-string">"Chairman: {get_display_name(CHAIRMAN_MODEL)}"</span>)</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">Stage 1 kicks off: every member of the council gets the question.</p>
+              <p class="tl">We log how many members are about to answer.</p>
+              <p class="tl">Stage 2: now every model becomes a critic of the others.</p>
+              <p class="tl">We log how many reviews are happening at once.</p>
+              <p class="tl">Quick math break: how much did the reviewers agree?</p>
+              <p class="tl">Stage 3: hand the whole packet to the chairman.</p>
+              <p class="tl">We log who the chairman is (the head judge model).</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================= -->
+      <!-- SCREEN 3: Why a council and not just one AI?                   -->
+      <!-- ============================================================= -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Why a council and not just one AI?</h2>
+
+        <p>One model can be confidently wrong, biased toward its training data, or just <em>hallucinate</em> a plausible-sounding fact. A council trades a few minutes of compute for a sanity check.</p>
+
+        <div class="pattern-cards stagger-children">
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)">
+            <div class="pattern-icon" style="background: var(--color-actor-2)">&#x1F50D;</div>
+            <h4 class="pattern-title">Redundancy</h4>
+            <p class="pattern-desc">Three independent attempts at the same question. If two agree and one disagrees, you can see exactly where the disagreement is.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-3)">
+            <div class="pattern-icon" style="background: var(--color-actor-3)">&#x1F914;</div>
+            <h4 class="pattern-title">Cross-check</h4>
+            <p class="pattern-desc">Each model critiques the others. A weak answer doesn&rsquo;t just slip through &mdash; it gets called out by name before it reaches you.</p>
+          </div>
+          <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4)">
+            <div class="pattern-icon" style="background: var(--color-actor-4)">&#x1F4DC;</div>
+            <h4 class="pattern-title">Synthesis</h4>
+            <p class="pattern-desc">A smarter chairman model reads the whole transcript and writes one coherent answer &mdash; not just an average, but a real verdict.</p>
+          </div>
+        </div>
+
+        <div class="callout callout-accent">
+          <div class="callout-icon">&#x1F4A1;</div>
+          <div class="callout-content">
+            <strong class="callout-title">Aha! moment</strong>
+            <p>Engineers call this pattern <strong><span class="term" data-definition="An ensemble is when you combine several models together to get a more reliable answer than any single model alone. Classic ML ensembles average numeric predictions; this council ensembles by having models critique each other in writing.">ensembling</span> with cross-evaluation</strong>. Most production AI systems eventually grow into something like this once a single-model answer is not good enough.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================= -->
+      <!-- SCREEN 4: Trace one question through (Data Flow + Group Chat)  -->
+      <!-- ============================================================= -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">Trace one question through</h2>
+
+        <p>Click <strong>Next Step</strong> to follow your question from the moment you hit Submit to the moment the final answer appears.</p>
+
+        <div class="flow-animation" data-steps='[
+          {"highlight":"flow-actor-1","label":"You click Submit with a question"},
+          {"highlight":"flow-actor-2","label":"Gradio sends the question to the Council Engine","packet":true,"from":"actor-1","to":"actor-2"},
+          {"highlight":"flow-actor-3","label":"Engine fans the question out to 3 local LLMs in parallel","packet":true,"from":"actor-2","to":"actor-3"},
+          {"highlight":"flow-actor-3","label":"Each LLM streams its answer back word by word"},
+          {"highlight":"flow-actor-3","label":"Engine sends all 3 answers (anonymized) back for peer review","packet":true,"from":"actor-2","to":"actor-3"},
+          {"highlight":"flow-actor-3","label":"Each LLM scores the others on accuracy, insight, completeness"},
+          {"highlight":"flow-actor-4","label":"Engine bundles everything and asks Claude to synthesize","packet":true,"from":"actor-2","to":"actor-4"},
+          {"highlight":"flow-actor-4","label":"Claude writes the final answer"},
+          {"highlight":"flow-actor-1","label":"You read the final answer with a consensus score","packet":true,"from":"actor-4","to":"actor-1"}
+        ]'>
+          <div class="flow-actors">
+            <div class="flow-actor" id="flow-actor-1">
+              <div class="flow-actor-icon" style="background: var(--color-actor-2)">&#x1F464;</div>
+              <span>You</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-2">
+              <div class="flow-actor-icon" style="background: var(--color-actor-3)">&#x1F4BB;</div>
+              <span>Gradio / Engine</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-3">
+              <div class="flow-actor-icon" style="background: var(--color-actor-5)">&#x1F916;</div>
+              <span>3 Local LLMs</span>
+            </div>
+            <div class="flow-actor" id="flow-actor-4">
+              <div class="flow-actor-icon" style="background: var(--color-actor-4)">&#x1F451;</div>
+              <span>Claude (Chairman)</span>
+            </div>
+          </div>
+
+          <div class="flow-packet" id="flow-packet"></div>
+
+          <div class="flow-step-label" id="flow-label">Click &ldquo;Next Step&rdquo; to begin.</div>
+
+          <div class="flow-controls">
+            <button class="btn flow-next-btn">Next Step</button>
+            <button class="btn flow-reset-btn">Restart</button>
+            <span class="flow-progress"></span>
+          </div>
+        </div>
+
+        <p style="margin-top: var(--space-10)">Here is what that conversation feels like, simplified to five lines of small talk:</p>
+
+        <div class="chat-window" id="chat-module1">
+          <div class="chat-messages">
+            <div class="chat-message" data-msg="0" data-sender="engine" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-3)">E</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-3)">Council Engine</span>
+                <p>Hey team &mdash; same question for all of you. Take your best shot, independently.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="1" data-sender="qwen" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-2)">Q</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-2)">Qwen 2.5</span>
+                <p>On it. Streaming back my answer now&hellip;</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="2" data-sender="gemma" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-5)">G</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-5)">Gemma 2</span>
+                <p>Same here &mdash; first draft incoming.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="3" data-sender="mistral" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-3)">M</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-3)">Mistral 7B</span>
+                <p>Done. Ready to grade the other two when you send them over.</p>
+              </div>
+            </div>
+            <div class="chat-message" data-msg="4" data-sender="claude" style="display:none">
+              <div class="chat-avatar" style="background: var(--color-actor-4)">C</div>
+              <div class="chat-bubble">
+                <span class="chat-sender" style="color: var(--color-actor-4)">Claude (Chairman)</span>
+                <p>Got all three answers and the peer reviews. I will synthesize the final verdict.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-typing" id="chat-module1-typing" style="display:none">
+            <div class="chat-avatar" id="chat-module1-typing-avatar">?</div>
+            <div class="chat-typing-dots">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+            </div>
+          </div>
+
+          <div class="chat-controls">
+            <button class="btn chat-next-btn">Next Message</button>
+            <button class="btn chat-all-btn">Play All</button>
+            <button class="btn chat-reset-btn">Replay</button>
+            <span class="chat-progress"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================= -->
+      <!-- SCREEN 5: The prompt + the cast + quiz                         -->
+      <!-- ============================================================= -->
+      <section class="screen animate-in">
+        <h2 class="screen-heading">The prompt every model actually sees</h2>
+
+        <p>Before the debate begins, the Council Engine sends each member the exact same <span class="term" data-definition="A prompt is the instructions you send to an AI in plain English &mdash; the recipe that tells it who to be, what to do, and what format to answer in. Tweaking the prompt is usually the cheapest way to change the output.">prompt</span>. It is short, deliberately. The constraints do most of the work.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line">prompt = f<span class="code-string">"""You are a member of an expert council deliberating on the following question.</span></span>
+<span class="code-line"><span class="code-string">Provide your best, most thoughtful answer. Be thorough but concise.</span></span>
+<span class="code-line"><span class="code-string"></span></span>
+<span class="code-line"><span class="code-string">QUESTION: {question}</span></span>
+<span class="code-line"><span class="code-string"></span></span>
+<span class="code-line"><span class="code-string">YOUR RESPONSE:"""</span></span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">We are telling the model: pretend you are on an expert panel.</p>
+              <p class="tl">Two simple rules &mdash; be thoughtful, do not ramble.</p>
+              <p class="tl">(Blank line for visual breathing room.)</p>
+              <p class="tl">Drop in whatever question the user typed, right here.</p>
+              <p class="tl">(Another blank line.)</p>
+              <p class="tl">End with a cue that signals &ldquo;your turn&rdquo; &mdash; the model will keep typing from here.</p>
+            </div>
+          </div>
+        </div>
+
+        <h2 class="screen-heading" style="margin-top: var(--space-12)">The cast of the council</h2>
+
+        <p>These are the models declared in the config file. Each one is a separately trained AI from a different lab, running locally through <span class="term" data-definition="Ollama is a tool that runs open-source LLMs on your own computer instead of calling someone else&rsquo;s API. Think of it as Docker for AI models &mdash; you ollama pull a model, and now you can chat with it offline.">Ollama</span>.</p>
+
+        <div class="translation-block animate-in">
+          <div class="translation-code">
+            <span class="translation-label">CODE</span>
+<pre><code><span class="code-line">AVAILABLE_MODELS: <span class="code-keyword">list</span>[<span class="code-keyword">str</span>] = [</span>
+<span class="code-line">    <span class="code-string">"llama3.3:70b"</span>,     <span class="code-comment"># ~40GB - Meta's flagship</span></span>
+<span class="code-line">    <span class="code-string">"qwen2.5:32b"</span>,      <span class="code-comment"># ~20GB - Alibaba's multilingual model</span></span>
+<span class="code-line">    <span class="code-string">"gemma2:27b"</span>,       <span class="code-comment"># ~17GB - Google's efficient model</span></span>
+<span class="code-line">    <span class="code-string">"deepseek-r1:32b"</span>,  <span class="code-comment"># ~20GB - Reasoning specialist</span></span>
+<span class="code-line">    <span class="code-string">"mistral:7b"</span>,       <span class="code-comment"># ~4GB  - Fast European model</span></span>
+<span class="code-line">]</span></code></pre>
+          </div>
+          <div class="translation-english">
+            <span class="translation-label">PLAIN ENGLISH</span>
+            <div class="translation-lines">
+              <p class="tl">A list of model names the app is allowed to pick from.</p>
+              <p class="tl">Llama 3.3 70B &mdash; the heavyweight. Eats about 40GB of <span class="term" data-definition="VRAM is video memory &mdash; the special fast memory on your GPU where AI models have to live while they are running. Bigger model = more VRAM needed. We cover this in detail in Module 4.">VRAM</span>.</p>
+              <p class="tl">Qwen 2.5 32B from Alibaba &mdash; strong at multiple languages.</p>
+              <p class="tl">Gemma 2 27B from Google &mdash; small and efficient for its size.</p>
+              <p class="tl">DeepSeek R1 32B &mdash; tuned to be good at step-by-step reasoning.</p>
+              <p class="tl">Mistral 7B from a French lab &mdash; the speedster, fits in 4GB.</p>
+              <p class="tl">End of list. Closing bracket.</p>
+            </div>
+          </div>
+        </div>
+
+        <h2 class="screen-heading" style="margin-top: var(--space-12)">Quick check &mdash; pick the best answer</h2>
+
+        <p>Three short scenarios. Pick the option that best matches what you just learned about the council pattern.</p>
+
+        <div class="quiz-container" id="quiz-module1">
+
+          <div class="quiz-question-block"
+               data-correct="option-a"
+               data-explanation-right="Exactly. Local LLMs sample the next word from a probability distribution &mdash; even with the same prompt, different samples produce different wording. The council pattern smooths this out by averaging across multiple attempts and adding the chairman&rsquo;s synthesis on top."
+               data-explanation-wrong="Not quite. The code is not broken and the chairman is not rotating &mdash; the deeper reason is that LLMs are non-deterministic by default. They roll dice for every next word, so two runs on the same question naturally drift apart.">
+            <h3 class="quiz-question">You ask the council the same question twice and get two slightly different final answers. Why?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Local LLMs are non-deterministic &mdash; they sample from probabilities, so different runs produce different wording.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The code is broken &mdash; it should always produce the same output.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>The chairman is rotating between different models each run.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="option-b"
+               data-explanation-right="Right. Stage 1 is the slowest because every model is generating an answer from scratch in parallel. Reviews and synthesis only have to read text that already exists &mdash; that is much faster than writing it. Cutting models or picking smaller ones in Stage 1 is the biggest speed lever."
+               data-explanation-wrong="Think about which stage is doing the most work. Stages 2 and 3 mostly read text that already exists. Stage 1 has to generate fresh answers from scratch in parallel &mdash; that is where the minutes go.">
+            <h3 class="quiz-question">You want a faster answer and do not need maximum quality. Which stage would you most want to shorten?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Stage 2 (peer reviews) &mdash; they all happen in parallel anyway, so they barely matter.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Stage 1 (initial responses) &mdash; the models are generating from scratch, which is the slowest part.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Stage 3 (chairman synthesis) &mdash; Claude is the most expensive model.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <div class="quiz-question-block"
+               data-correct="option-c"
+               data-explanation-right="Nice mapping. Classic ML ensembles average numeric predictions; this one is an ensemble that talks &mdash; each model writes a free-text answer, the others critique them by name, and a smarter chairman synthesizes. Same family of idea, different mechanism."
+               data-explanation-wrong="It is closer to an ensemble than &lsquo;just one model&rsquo; or &lsquo;just voting&rsquo;. The key twist is that the models do not produce numbers to average &mdash; they produce free text and critique each other, then a chairman writes the verdict. It is an ensemble that talks.">
+            <h3 class="quiz-question">Your friend asks: &ldquo;Is this just an ensemble like in machine learning?&rdquo; What is the best answer?</h3>
+            <div class="quiz-options">
+              <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>No, ensembling is only about averaging predictions &mdash; this is something totally different.</span>
+              </button>
+              <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Yes &mdash; it is identical to a voting ensemble in scikit-learn.</span>
+              </button>
+              <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                <div class="quiz-option-radio"></div>
+                <span>Sort of &mdash; but instead of averaging predictions, each model writes a free-text answer, the others critique them by name, and a smarter chairman synthesizes. It is an ensemble that talks.</span>
+              </button>
+            </div>
+            <div class="quiz-feedback"></div>
+          </div>
+
+          <button class="quiz-check-btn" onclick="checkQuiz('quiz-module1')">Check Answers</button>
+          <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module1')">Try Again</button>
+        </div>
+
+        <p style="margin-top: var(--space-10); color: var(--color-text-secondary)"><em>Next up:</em> we put faces to the models &mdash; who they are, how big they are, and what each one is good at.</p>
+      </section>
+
+    </div>
+  </div>
+</section>
